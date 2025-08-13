@@ -52,5 +52,5 @@ jobs:
             ${{ steps.file_report.outputs.html_list }}
 
           # IMPORTANT: Change this to your actual email address
-          to: secrets.GMAIL_USERNAME
+          to: balakrishnam@bidgely.com
           from: GitHub Actions <${{ secrets.GMAIL_USERNAME }}>

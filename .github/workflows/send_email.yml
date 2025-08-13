@@ -29,11 +29,6 @@ jobs:
       - name: Send email with file report
         uses: dawidd6/action-send-mail@v3
         with:
-          # CRITICAL: This line tells the email client to render HTML.
-          # Check that it exists and is indented exactly like this.
-          content_type: text/html
-          
-          # All other parameters must also be indented under 'with'.
           server_address: smtp.gmail.com
           server_port: 465
           username: ${{ secrets.GMAIL_USERNAME }}
@@ -41,7 +36,7 @@ jobs:
 
           subject: "Total file of the ${{ github.repository }}"
           
-          body: |
+          html_body: |
             <p><b>Total visible files:</b> ${{ steps.file_report.outputs.count }}</p>
             <hr>
             <h3>File Names</h3>

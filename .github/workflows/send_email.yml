@@ -1,0 +1,48 @@
+name: Email File Report on Main Push
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_and_send_email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Prepare File Report
+        id: file_report
+        run: |
+          # The key change is in the find command below to exclude hidden files/dirs.
+          FULL_FILE_LIST=$(find . -name ".*" -prune -o -type f -print)
+          
+          FILE_COUNT=$(echo "$FULL_FILE_LIST" | wc -l)
+          
+          echo "count=$FILE_COUNT" >> $GITHUB_OUTPUT
+          
+          {
+            echo 'file_list<<EOF'
+            echo "$FULL_FILE_LIST"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Send email with file report
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+
+          subject: "Total file of the ${{ github.repository }}"
+          body: |
+            Total visible files: ${{ steps.file_report.outputs.count }}
+            
+            --- File Names ---
+            ${{ steps.file_report.outputs.file_list }}
+
+          # IMPORTANT: Change this to your actual email address
+          to: balakrishnam@bidgely.com
+          from: GitHub Actions <${{ secrets.GMAIL_USERNAME }}>

@@ -1,16 +1,21 @@
-name: Code Checkout and List Files
+name: Count and List Files
 
 on: [push]
 
 jobs:
-  checkout_and_list:
+  count_and_list_job:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Use a pre-built action to check out your repository code
+      # First, check out the repository's code so the runner has access to it
       - name: Check out repository code
         uses: actions/checkout@v4
 
-      # Step 2: Run a command to list files in the directory
-      - name: List files in repository
-        run: ls -l
+      # Add a new step to count and list the files
+      - name: List files and print total count
+        run: |
+          echo "--- All File Names ---"
+          find . -type f
+          echo "----------------------"
+          file_count=$(find . -type f | wc -l)
+          echo "Total no of files: $file_count"

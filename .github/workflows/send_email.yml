@@ -12,33 +12,39 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v4
 
-      - name: Prepare File Report
+      - name: Prepare HTML File Report
         id: file_report
         run: |
-          # This command reliably lists all files tracked by Git.
-          # It's simpler and better for this use case than 'find'.
-          FULL_FILE_LIST=$(git ls-files)
-          
-          # The rest of the script remains the same
-          FILE_COUNT=$(echo "$FULL_FILE_LIST" | wc -l)
-          
+          # Get the total file count
+          FILE_COUNT=$(git ls-files | wc -l)
           echo "count=$FILE_COUNT" >> $GITHUB_OUTPUT
           
+          # Convert the file list into an HTML <ul> list using sed
+          # 's/.*/<li>&<\/li>/' wraps each line in <li> tags
+          HTML_LIST="<ul>$(git ls-files | sed 's/.*/<li>&<\/li>/')</ul>"
+
+          # Set the HTML list as a step output
+          # Using a heredoc is the most reliable way to pass complex strings
           {
-            echo 'file_list<<EOF'
-            echo "$FULL_FILE_LIST"
+            echo 'html_list<<EOF'
+            echo "$HTML_LIST"
             echo 'EOF'
           } >> $GITHUB_OUTPUT
 
       - name: Send email with file report
         uses: dawidd6/action-send-mail@v3
         with:
+          # Tell the action to send the email as HTML
+          content_type: text/html
+          
           server_address: smtp.gmail.com
           server_port: 465
           username: ${{ secrets.GMAIL_USERNAME }}
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
 
           subject: "Total file of the ${{ github.repository }}"
+          
+          # The body is now structured with HTML tags
           body: |
             <p><b>Total visible files:</b> ${{ steps.file_report.outputs.count }}</p>
             <hr>
@@ -46,5 +52,5 @@ jobs:
             ${{ steps.file_report.outputs.html_list }}
 
           # IMPORTANT: Change this to your actual email address
-          to: balakrishnam@bidgely.com
+          to: secrets.GMAIL_USERNAME
           from: GitHub Actions <${{ secrets.GMAIL_USERNAME }}>

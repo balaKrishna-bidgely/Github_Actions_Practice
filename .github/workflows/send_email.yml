@@ -40,11 +40,11 @@ jobs:
 
           subject: "Total file of the ${{ github.repository }}"
           body: |
-            Total visible files: ${{ steps.file_report.outputs.count }}
-            
-            --- File Names ---
-            ${{ steps.file_report.outputs.file_list }}
+            <p><b>Total visible files:</b> ${{ steps.file_report.outputs.count }}</p>
+            <hr>
+            <h3>File Names</h3>
+            ${{ steps.file_report.outputs.html_list }}
 
           # IMPORTANT: Change this to your actual email address
-          to: your-email@example.com
+          to: balakrishnam@bidgely.com
           from: GitHub Actions <${{ secrets.GMAIL_USERNAME }}>

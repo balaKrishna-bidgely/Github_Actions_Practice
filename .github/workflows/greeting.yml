@@ -1,18 +1,16 @@
-# Name of your workflow
-name: Simple Greeting
+name: Code Checkout and List Files
 
-# Define the event that triggers this workflow
 on: [push]
 
-# Define the jobs that the workflow will run
 jobs:
-  # Name of your job (can be anything)
-  greeting_job:
-    # Specify the runner (virtual machine) to use
+  checkout_and_list:
     runs-on: ubuntu-latest
 
-    # Define the steps within the job
     steps:
-      # Each step starts with a hyphen (-)
-      - name: Print a greeting
-        run: echo "Hello, GitHub Actions! Welcome to your first workflow! 🎉"
+      # Step 1: Use a pre-built action to check out your repository code
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      # Step 2: Run a command to list files in the directory
+      - name: List files in repository
+        run: ls -l

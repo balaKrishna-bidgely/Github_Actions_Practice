@@ -15,9 +15,11 @@ jobs:
       - name: Prepare File Report
         id: file_report
         run: |
-          # The key change is in the find command below to exclude hidden files/dirs.
-          FULL_FILE_LIST=$(find . -name ".*" -prune -o -type f -print)
+          # This command reliably lists all files tracked by Git.
+          # It's simpler and better for this use case than 'find'.
+          FULL_FILE_LIST=$(git ls-files)
           
+          # The rest of the script remains the same
           FILE_COUNT=$(echo "$FULL_FILE_LIST" | wc -l)
           
           echo "count=$FILE_COUNT" >> $GITHUB_OUTPUT
@@ -44,5 +46,5 @@ jobs:
             ${{ steps.file_report.outputs.file_list }}
 
           # IMPORTANT: Change this to your actual email address
-          to: balakrishnam@bidgely.com
+          to: your-email@example.com
           from: GitHub Actions <${{ secrets.GMAIL_USERNAME }}>

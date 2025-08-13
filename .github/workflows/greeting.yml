@@ -1,0 +1,18 @@
+# Name of your workflow
+name: Simple Greeting
+
+# Define the event that triggers this workflow
+on: [push]
+
+# Define the jobs that the workflow will run
+jobs:
+  # Name of your job (can be anything)
+  greeting_job:
+    # Specify the runner (virtual machine) to use
+    runs-on: ubuntu-latest
+
+    # Define the steps within the job
+    steps:
+      # Each step starts with a hyphen (-)
+      - name: Print a greeting
+        run: echo "Hello, GitHub Actions! Welcome to your first workflow! 🎉"

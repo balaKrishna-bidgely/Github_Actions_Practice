@@ -53,7 +53,7 @@ jobs:
           git commit -m "Add grep results for UUID ${{ github.event.inputs.uuid }}" || echo "No changes to commit"
           git push
 
-            - name: Deploy grep result to GitHub Pages
+      - name: Deploy grep result to GitHub Pages
         run: |
           mkdir -p public
           cp search_results/uuid_matches.txt public/

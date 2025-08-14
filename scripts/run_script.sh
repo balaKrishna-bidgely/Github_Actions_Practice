@@ -10,14 +10,12 @@ S3_LIST_FILE="./scripts/s3_files.txt"
 mkdir -p "$DOWNLOAD_DIR"
 mkdir -p "$OUTPUT_DIR"
 
-# -------- Check S3 list file --------
-if [[ ! -f "$S3_LIST_FILE" ]]; then
-    echo "❌ S3 list file '$S3_LIST_FILE' not found!"
-    exit 1
-fi
+# -------- Read file into variable --------
+file=$(cat "$S3_LIST_FILE")
 
 # -------- Process Each S3 File --------
-while IFS= read -r s3_path; do
+for s3_path in $file; do
+    # Skip empty lines or lines starting with #
     [[ -z "$s3_path" || "$s3_path" =~ ^# ]] && continue
 
     echo "📥 Downloading: $s3_path"
@@ -29,6 +27,6 @@ while IFS= read -r s3_path; do
     echo "🔄 Converting: $local_file"
     python3 "$PYTHON_SCRIPT" "$local_file" "$OUTPUT_DIR"
 
-done < "$S3_LIST_FILE"
+done
 
 echo "✅ All files downloaded and processed."

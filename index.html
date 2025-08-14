@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Grep Results for UUID</title>
+  <style>
+    body { font-family: monospace; background: #f4f4f4; padding: 20px; }
+    pre { background: white; padding: 15px; border: 1px solid #ddd; }
+  </style>
+</head>
+<body>
+  <h1>Latest Grep Results</h1>
+  <pre id="logContent">Loading...</pre>
+  <script>
+    fetch('search_results/uuid_matches.txt?_=' + Date.now())
+      .then(r => r.text())
+      .then(t => document.getElementById('logContent').textContent = t)
+      .catch(e => document.getElementById('logContent').textContent = 'Error loading results.');
+  </script>
+</body>
+</html>

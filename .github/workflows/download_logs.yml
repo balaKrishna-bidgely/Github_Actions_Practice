@@ -10,6 +10,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }} # Needed to push changes
 
       - name: Set up Python 3
         uses: actions/setup-python@v5
@@ -31,3 +33,11 @@ jobs:
 
       - name: Run S3 download & convert script
         run: ./scripts/run_script.sh
+
+      - name: Commit & Push downloaded files
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add downloaded_logs converted_txts
+          git commit -m "Add downloaded and converted logs" || echo "No changes to commit"
+          git push

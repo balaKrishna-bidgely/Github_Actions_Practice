@@ -1,0 +1,1 @@
+s3://bidgely-log-backup-us-west-2/logs-compressed/env=nonprodqa/component=aggregationMessageProcessor/dt=2025-08-11-23/aggregationMessageProcessor.log.2025-08-11-23.1.1754895827.704

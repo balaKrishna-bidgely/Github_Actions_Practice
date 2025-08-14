@@ -55,9 +55,15 @@ jobs:
 
       - name: Deploy grep result HTML to main branch
         run: |
+          # Ensure search_results directory exists
           mkdir -p search_results
-          cp search_results/uuid_matches.txt search_results/uuid_matches.txt
 
+          # Overwrite (or create) uuid_matches.txt
+          rm -f search_results/uuid_matches.txt
+          grep -r --no-messages "${{ github.event.inputs.uuid }}" converted_txts > search_results/uuid_matches.txt || true
+
+          # Overwrite (or create) index.html
+          rm -f index.html
           cat <<EOF > index.html
           <!DOCTYPE html>
           <html>
@@ -82,6 +88,7 @@ jobs:
           </html>
           EOF
 
+          # Commit and push changes
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add index.html search_results/uuid_matches.txt

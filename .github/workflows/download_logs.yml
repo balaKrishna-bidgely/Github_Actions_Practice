@@ -53,7 +53,7 @@ jobs:
           git commit -m "Add grep results for UUID ${{ github.event.inputs.uuid }}" || echo "No changes to commit"
           git push
 
-      - name: Deploy grep result to GitHub Pages
+            - name: Deploy grep result to GitHub Pages
         run: |
           mkdir -p public
           cp search_results/uuid_matches.txt public/
@@ -81,10 +81,13 @@ jobs:
           </body>
           </html>
           EOF
-          
-          git checkout --orphan gh-pages
-          git reset
-          cp -r public/* .
-          git add .
-          git commit -m "Update grep results page"
-          git push --force origin gh-pages
+
+          # Switch to gh-pages branch without wiping it
+          git fetch origin gh-pages || true
+          git checkout gh-pages || git checkout --orphan gh-pages
+
+          # Copy new files and commit
+          cp public/* .
+          git add index.html uuid_matches.txt
+          git commit -m "Update grep results page" || echo "No changes to commit"
+          git push origin gh-pages

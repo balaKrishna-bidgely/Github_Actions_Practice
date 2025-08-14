@@ -1,1 +1,7 @@
+s3://bidgely-log-backup-us-west-2/logs-compressed/env=nonprodqa/component=rateComparisonQueueProcessor/dt=2025-08-11-23/rateComparisonQueueProcessor.log.2025-08-11-23.1.1754909654.674
 s3://bidgely-log-backup-us-west-2/logs-compressed/env=nonprodqa/component=aggregationMessageProcessor/dt=2025-08-11-23/aggregationMessageProcessor.log.2025-08-11-23.1.1754895827.704
+s3://bidgely-log-backup-us-west-2/logs-compressed/env=nonprodqa/component=gbUserDataIngester/dt=2025-08-11-23/gbUserDataIngester.log.2025-08-11-23.1.1754919140.296
+s3://bidgely-log-backup-us-west-2/logs-compressed/env=nonprodqa/component=aggregationMessageProcessorPriority/dt=2025-08-11-23/aggregationMessageProcessorPriority.log.2025-08-11-23.1.1754906645.539
+s3://bidgely-log-backup-us-west-2/logs-compressed/env=nonprodqa/component=emailer/dt=2025-08-11-13/emailer.log-1754919666-i-0cb310fa3e02e23a8-
+s3://bidgely-log-backup-us-west-2/logs-compressed/env=nonprodqa/component=uploadEventSplitter/dt=2025-08-11-13/uploadEventSplitter.log-1754919663-i-0cb310fa3e02e23a8-
+s3://bidgely-log-backup-us-west-2/logs-compressed/env=nonprodqa/component=pydisagg/dt=2025-08-11-06/gb_disagg.log-1754893801-i-087d710ce96f450a2

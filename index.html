@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>UUID Matches Viewer</title>
+  <title>UUID Matches</title>
   <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
   <style>
     body {
@@ -11,6 +11,14 @@
     }
     table {
       width: 100%;
+      table-layout: fixed; /* prevents shrinking columns */
+    }
+    td {
+      white-space: nowrap; /* no line wrapping */
+      overflow-x: auto;    /* allow horizontal scroll if text is too long */
+    }
+    th {
+      white-space: nowrap;
     }
   </style>
 </head>
@@ -32,6 +40,7 @@
       .then(data => {
         const lines = data.split('\n').filter(line => line.trim() !== '');
         const tbody = document.querySelector('#logTable tbody');
+        
         lines.forEach(line => {
           const row = document.createElement('tr');
           const cell = document.createElement('td');
@@ -39,10 +48,13 @@
           row.appendChild(cell);
           tbody.appendChild(row);
         });
+
         $('#logTable').DataTable({
-          pageLength: 25,   // default rows per page
-          order: [],        // no initial sorting
-          stateSave: true,  // remember table state
+          paging: false,     // disable pagination
+          ordering: false,   // no sorting
+          info: false,       // remove "Showing X of Y entries"
+          searching: false,  // no search box
+          scrollX: true      // allow horizontal scrolling
         });
       })
       .catch(err => {
@@ -52,4 +64,3 @@
   </script>
 </body>
 </html>
-

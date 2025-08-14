@@ -17,7 +17,7 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: pip install pandas pyarrow awscli dos2unix
+        run: pip install pandas pyarrow awscli
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -25,9 +25,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-west-2
-
-      - name: Fix line endings (Windows CRLF to Unix LF)
-        run: dos2unix scripts/s3_files.txt
 
       - name: Make shell script executable
         run: chmod +x scripts/run_script.sh

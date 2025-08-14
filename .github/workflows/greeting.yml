@@ -4,6 +4,7 @@ on: [push]
 
 jobs:
   count_and_list_job:
+    if: false
     runs-on: ubuntu-latest
 
     steps:

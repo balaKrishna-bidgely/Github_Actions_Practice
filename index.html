@@ -2,20 +2,54 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Grep Results for UUID</title>
+  <title>UUID Matches Viewer</title>
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
   <style>
-    body { font-family: monospace; background: #f4f4f4; padding: 20px; }
-    pre { background: white; padding: 15px; border: 1px solid #ddd; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    table {
+      width: 100%;
+    }
   </style>
 </head>
 <body>
-  <h1>Latest Grep Results</h1>
-  <pre id="logContent">Loading...</pre>
+  <h1>UUID Matches</h1>
+  <table id="logTable" class="display">
+    <thead>
+      <tr><th>Log Line</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
   <script>
+    // Fetch the text file and populate table
     fetch('search_results/uuid_matches.txt?_=' + Date.now())
-      .then(r => r.text())
-      .then(t => document.getElementById('logContent').textContent = t)
-      .catch(e => document.getElementById('logContent').textContent = 'Error loading results.');
+      .then(response => response.text())
+      .then(data => {
+        const lines = data.split('\n').filter(line => line.trim() !== '');
+        const tbody = document.querySelector('#logTable tbody');
+        lines.forEach(line => {
+          const row = document.createElement('tr');
+          const cell = document.createElement('td');
+          cell.textContent = line;
+          row.appendChild(cell);
+          tbody.appendChild(row);
+        });
+        $('#logTable').DataTable({
+          pageLength: 25,   // default rows per page
+          order: [],        // no initial sorting
+          stateSave: true,  // remember table state
+        });
+      })
+      .catch(err => {
+        document.body.innerHTML += '<p style="color:red;">Error loading log file.</p>';
+        console.error(err);
+      });
   </script>
 </body>
 </html>
+

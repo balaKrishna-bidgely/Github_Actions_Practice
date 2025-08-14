@@ -53,12 +53,12 @@ jobs:
           git commit -m "Add grep results for UUID ${{ github.event.inputs.uuid }}" || echo "No changes to commit"
           git push
 
-      - name: Deploy grep result to GitHub Pages
+      - name: Deploy grep result HTML to main branch
         run: |
-          mkdir -p public
-          cp search_results/uuid_matches.txt public/
+          mkdir -p search_results
+          cp search_results/uuid_matches.txt search_results/uuid_matches.txt
 
-          cat <<EOF > public/index.html
+          cat <<EOF > index.html
           <!DOCTYPE html>
           <html>
           <head>
@@ -73,7 +73,7 @@ jobs:
             <h1>Latest Grep Results</h1>
             <pre id="logContent">Loading...</pre>
             <script>
-              fetch('uuid_matches.txt?_=' + Date.now())
+              fetch('search_results/uuid_matches.txt?_=' + Date.now())
                 .then(r => r.text())
                 .then(t => document.getElementById('logContent').textContent = t)
                 .catch(e => document.getElementById('logContent').textContent = 'Error loading results.');
@@ -82,12 +82,8 @@ jobs:
           </html>
           EOF
 
-          # Switch to gh-pages branch without wiping it
-          git fetch origin gh-pages || true
-          git checkout gh-pages || git checkout --orphan gh-pages
-
-          # Copy new files and commit
-          cp public/* .
-          git add index.html uuid_matches.txt
-          git commit -m "Update grep results page" || echo "No changes to commit"
-          git push origin gh-pages
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html search_results/uuid_matches.txt
+          git commit -m "Update grep results HTML page" || echo "No changes to commit"
+          git push

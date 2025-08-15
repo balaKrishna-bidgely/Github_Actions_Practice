@@ -13,6 +13,8 @@ mkdir -p "$OUTPUT_DIR"
 # -------- Read file into variable --------
 file=$(cat "$S3_LIST_FILE")
 
+echo "Starting to downloading the files:\n $file"
+
 # -------- Process Each S3 File --------
 for s3_path in $file; do
     # Skip empty lines or lines starting with #

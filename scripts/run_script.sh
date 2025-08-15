@@ -5,7 +5,7 @@ set -e
 DOWNLOAD_DIR="./downloaded_logs"
 OUTPUT_DIR="./converted_txts"
 PYTHON_SCRIPT="./scripts/convert_parquet_to_txt.py"
-S3_LIST_FILE="./scripts/s3_files.txt"
+S3_LIST_FILE="./s3_files.txt"
 
 mkdir -p "$DOWNLOAD_DIR"
 mkdir -p "$OUTPUT_DIR"

@@ -1,0 +1,4 @@
+s3://bidgely-log-backup-us-west-2/logs-compressed/env=nonprodqa/component=api-server-nonprodqa/dt=2025-07-29-07/localhost_access_log.2025-07-28-api-server-nonprodqa-6c74cd7bc7-mzxrc.txt
+s3://bidgely-log-backup-us-west-2/logs-compressed/env=nonprodqa/component=api-server-nonprodqa/dt=2025-07-29-07/catalina.2025-07-28-5-api-server-nonprodqa-6c74cd7bc7-mzxrc.log
+s3://bidgely-log-backup-us-west-2/logs-compressed/env=nonprodqa/component=api-server-nonprodqa/dt=2025-07-29-07/catalina.2025-07-28-4-api-server-nonprodqa-6c74cd7bc7-mzxrc.log
+s3://bidgely-log-backup-us-west-2/logs-compressed/env=nonprodqa/component=api-server-nonprodqa/dt=2025-07-29-07/localhost_access_log.2025-07-29-api-server-nonprodqa-6c74cd7bc7-mzxrc.txt

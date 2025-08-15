@@ -1,1 +1,0 @@
-s3://bidgely-log-backup-us-west-2/logs-compressed/env=nonprodqa/component=emailer/dt=2025-08-11-13/emailer.log-1754919666-i-0cb310fa3e02e23a8-

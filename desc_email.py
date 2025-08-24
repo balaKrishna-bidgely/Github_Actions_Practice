@@ -134,6 +134,7 @@ def process_users_from_file(file_path, output_csv, start, end, max_threads=THREA
 
     success_count = 0
     fail_count = 0
+    failed_users = []
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
         results_iter = executor.map(process_user, users)
@@ -143,12 +144,13 @@ def process_users_from_file(file_path, output_csv, start, end, max_threads=THREA
             writer.writerow(["userId", "notificationType", "notificationId", "generationTimestamp", "Month", "loadShiftAmount"])
 
             processed = 0
-            for status, rows in results_iter:
+            for (status, rows), user_id in zip(results_iter, users):
                 processed += 1
                 if status == "Success":
                     success_count += 1
                 else:
                     fail_count += 1
+                    failed_users.append(user_id)
 
                 if rows:
                     writer.writerows(rows)
@@ -158,6 +160,19 @@ def process_users_from_file(file_path, output_csv, start, end, max_threads=THREA
 
     logging.info(f"✅ Finished batch {start}-{end}, saved to {output_csv}")
     logging.info(f"📊 Summary: Total={total}, Success={success_count}, Failed={fail_count}")
+
+    if failed_users:
+        logging.warning(f"❌ Failed userIds ({len(failed_users)}): {'\n'.join(failed_users)}")
+
+        # # Optionally save failed users to a separate file
+        # failed_csv = output_csv.replace(".csv", "_failed.csv")
+        # with open(failed_csv, "w", newline="", encoding="utf-8") as f:
+        #     writer = csv.writer(f)
+        #     writer.writerow(["userId"])
+        #     for uid in failed_users:
+        #         writer.writerow([uid])
+        # logging.info(f"💾 Failed userIds saved to {failed_csv}")
+
 
 def main():
     setup_logger()

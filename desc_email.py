@@ -20,7 +20,7 @@ NOTIFICATION_TYPES = ['MONTHLY_SUMMARY', 'BILL_PROJECTION']
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
 }
-THREAD_POOL_SIZE=100
+THREAD_POOL_SIZE = 100
 # ----------------------------
 
 def setup_logger():
@@ -35,8 +35,8 @@ def create_session(max_pool_size):
     """Create a requests session with retry & backoff."""
     session = requests.Session()
     retries = Retry(
-        total=5,                # retry up to 5 times
-        backoff_factor=2,       # wait 2s, 4s, 8s, etc.
+        total=5,
+        backoff_factor=2,
         status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods=["GET"]
     )
@@ -162,17 +162,13 @@ def process_users_from_file(file_path, output_csv, start, end, max_threads=THREA
     logging.info(f"📊 Summary: Total={total}, Success={success_count}, Failed={fail_count}")
 
     if failed_users:
-        logging.warning(f"❌ Failed userIds ({len(failed_users)}):\n" + "\n".join(failed_users))
-
-        # # Optionally save failed users to a separate file
-        # failed_csv = output_csv.replace(".csv", "_failed.csv")
-        # with open(failed_csv, "w", newline="", encoding="utf-8") as f:
-        #     writer = csv.writer(f)
-        #     writer.writerow(["userId"])
-        #     for uid in failed_users:
-        #         writer.writerow([uid])
-        # logging.info(f"💾 Failed userIds saved to {failed_csv}")
-
+        failed_csv = output_csv.replace(".csv", "_failed.csv")
+        with open(failed_csv, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["userId"])
+            for uid in failed_users:
+                writer.writerow([uid])
+        logging.info(f"💾 Failed userIds saved to {failed_csv}")
 
 def main():
     setup_logger()

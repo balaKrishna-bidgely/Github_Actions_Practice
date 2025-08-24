@@ -29,10 +29,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Start Timer
-        id: timer_start
-        run: echo "start_time=$(date +%s)" >> $GITHUB_ENV
-
       - name: Calculate Batch Range
         id: calc
         run: |
@@ -58,26 +54,23 @@ jobs:
             --end ${{ steps.calc.outputs.end }} \
             --output output_${{ matrix.batch }}.csv
 
-      - name: End Timer and Log Duration
-        run: |
-          END_TIME=$(date +%s)
-          DURATION=$((END_TIME - $start_time))
-          echo "⏱️ Job ${{ matrix.batch }} finished in $DURATION seconds"
-
       - name: Upload CSV artifacts
         uses: actions/upload-artifact@v4
         with:
           name: results-batch-${{ matrix.batch }}
           path: output_${{ matrix.batch }}.csv
 
+      - name: Upload Failed Users artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-batch-${{ matrix.batch }}
+          path: output_${{ matrix.batch }}_failed.csv
+
   merge-results:
     runs-on: ubuntu-latest
     needs: process-users
     steps:
-      - name: Start Workflow Timer
-        id: wf_start
-        run: echo "wf_start_time=$(date +%s)" >> $GITHUB_ENV
-
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -104,6 +97,39 @@ jobs:
 
           echo "✅ Merged CSV written to $OUTFILE"
 
+      - name: Merge Failed User IDs
+        run: |
+          mkdir -p merged
+          FAILED_FILE=merged/failed_users.txt
+          touch $FAILED_FILE
+
+          for file in results/**/output_*_failed.csv; do
+            if [ -f "$file" ]; then
+              echo "Merging failed users from $file"
+              tail -n +2 "$file" >> $FAILED_FILE   # skip header
+            fi
+          done
+
+          sort -u $FAILED_FILE -o $FAILED_FILE   # remove duplicates
+          echo "✅ Collected failed user IDs into $FAILED_FILE"
+
+      - name: Prepare Email Body
+        id: email_body
+        run: |
+          echo "<ul>" > merged/failed_users.html
+          if [ -s merged/failed_users.txt ]; then
+            while read user; do
+              echo "<li>$user</li>" >> merged/failed_users.html
+            done < merged/failed_users.txt
+          else
+            echo "<li>No failed users 🎉</li>" >> merged/failed_users.html
+          fi
+          echo "</ul>" >> merged/failed_users.html
+          BODY=$(cat merged/failed_users.html)
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Convert CSV to Excel
         run: |
           echo "📊 Converting CSV to Excel..."
@@ -127,13 +153,7 @@ jobs:
           echo "Uploading to ${{ github.event.inputs.s3_path }}"
           aws s3 cp merged/output.xlsx ${{ github.event.inputs.s3_path }}
 
-      - name: End Workflow Timer and Log Duration
-        run: |
-          END_TIME=$(date +%s)
-          DURATION=$((END_TIME - $wf_start_time))
-          echo "⏱️ Total workflow (merge + upload) finished in $DURATION seconds"
-
-      - name: Send email with S3 link
+      - name: Send email with S3 link and Failed Users
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -146,6 +166,9 @@ jobs:
             <p>The result file is uploaded to S3:</p>
             <p><code>${{ github.event.inputs.s3_path }}</code></p>
             <br>
+            <h4>❌ Failed Users:</h4>
+            ${{ steps.email_body.outputs.body }}
+            <br>
             Run Number: ${{ github.run_number }}<br>
             Repository: ${{ github.repository }}
           to: balakrishnam@bidgely.com
@@ -156,3 +179,4 @@ jobs:
         with:
           name: |
             results-batch-*
+            failed-batch-*

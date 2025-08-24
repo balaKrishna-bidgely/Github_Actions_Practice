@@ -79,7 +79,7 @@ def process_user(user_id: str) -> list:
                                 n.get("notificationType"),
                                 nid,
                                 ts_ms,
-                                gen_date.strftime("%B"),
+                                gen_date.strftime("%B").upper(),
                                 suggestion
                             ]
                             logging.info(f"Found: {row}")
@@ -112,7 +112,7 @@ def process_users_from_file(file_path, output_csv, start, end, max_threads=100):
 
         with open(output_csv, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow(["userId","notificationType","notificationId","generationTimestamp","Month","extractedText"])
+            writer.writerow(["userId","notificationType","notificationId","generationTimestamp","Month","loadShiftAmount"])
 
             processed = 0
             for status, rows in results_iter:

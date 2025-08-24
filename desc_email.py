@@ -128,6 +128,7 @@ def read_user_ids(file_path, start, end):
 def process_users_from_file(file_path, output_csv, start, end, max_threads=THREAD_POOL_SIZE):
     users = read_user_ids(file_path, start, end)
     total = len(users)
+    THREAD_POOL_SIZE = min(total, THREAD_POOL_SIZE)
     logging.info(f"Considering thread-pool size {THREAD_POOL_SIZE}")
     logging.info(f"Processing {total} users (lines {start}-{end})...")
 

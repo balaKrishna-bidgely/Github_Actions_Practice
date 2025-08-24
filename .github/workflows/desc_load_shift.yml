@@ -45,6 +45,7 @@ jobs:
           END=$(( (INDEX + 1) * SIZE ))
           if [ $END -gt $TOTAL ]; then END=$TOTAL; fi
 
+          echo "found $TOTAL users in the file"
           echo "start=$START" >> $GITHUB_OUTPUT
           echo "end=$END" >> $GITHUB_OUTPUT
 

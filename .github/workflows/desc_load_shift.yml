@@ -2,6 +2,11 @@ name: Process Users in Parallel
 
 on:
   workflow_dispatch:
+    inputs:
+      s3_path:
+        description: "S3 location to upload merged output file"
+        required: true
+        default: "s3://bidgely-adhoc-productqa/ReCreatingProdData/BalaKrishna/output.csv"
 
 jobs:
   process-users:
@@ -84,21 +89,19 @@ jobs:
 
           echo "✅ Merged CSV written to $OUTFILE"
 
-      - name: Compress final output
-        run: |
-          gzip -c merged/output.csv > merged/output.csv.gz
-          echo "✅ Compressed file: merged/output.csv.gz"
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
 
-      - name: Commit merged file
+      - name: Upload merged CSV to S3
         run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          cp merged/output.csv.gz ./output.csv.gz
-          git add output.csv.gz
-          git commit -m "Add/update final merged compressed output.csv.gz" || echo "No changes to commit"
-          git push
+          echo "Uploading to ${{ github.event.inputs.s3_path }}"
+          aws s3 cp merged/output.csv ${{ github.event.inputs.s3_path }}
 
-      - name: Send email with compressed file
+      - name: Send email with S3 link
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -107,11 +110,11 @@ jobs:
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           subject: 'User Processing Report - ${{ github.run_number }}'
           html_body: |
-            <h4>The user processing script has completed.</h4> 
-            <p>Please find the compressed <code>output.csv.gz</code> attached.</p>
-            
+            <h4>The user processing script has completed ✅</h4> 
+            <p>The final merged file has been uploaded to S3:</p>
+            <p><code>${{ github.event.inputs.s3_path }}</code></p>
+            <br>
             Run Number: ${{ github.run_number }}<br>
             Repository: ${{ github.repository }}
           to: balakrishnam@bidgely.com
           from: GitHub Actions <actions@github.com>
-          attachments: output.csv.gz

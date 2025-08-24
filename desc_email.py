@@ -128,7 +128,7 @@ def read_user_ids(file_path, start, end):
 def process_users_from_file(file_path, output_csv, start, end, max_threads=THREAD_POOL_SIZE):
     users = read_user_ids(file_path, start, end)
     total = len(users)
-    THREAD_POOL_SIZE = min(total, THREAD_POOL_SIZE)
+    THREAD_POOL_SIZE = min(total, max_threads)
     logging.info(f"Considering thread-pool size {THREAD_POOL_SIZE}")
     logging.info(f"Processing {total} users (lines {start}-{end})...")
 
@@ -162,7 +162,7 @@ def process_users_from_file(file_path, output_csv, start, end, max_threads=THREA
     logging.info(f"📊 Summary: Total={total}, Success={success_count}, Failed={fail_count}")
 
     if failed_users:
-        logging.warning(f"❌ Failed userIds ({len(failed_users)}): {'\n'.join(failed_users)}")
+        logging.warning(f"❌ Failed userIds ({len(failed_users)}):\n" + "\n".join(failed_users))
 
         # # Optionally save failed users to a separate file
         # failed_csv = output_csv.replace(".csv", "_failed.csv")

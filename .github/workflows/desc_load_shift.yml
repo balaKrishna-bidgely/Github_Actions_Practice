@@ -29,6 +29,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Start Timer
+        id: timer_start
+        run: echo "start_time=$(date +%s)" >> $GITHUB_ENV
+
       - name: Calculate Batch Range
         id: calc
         run: |
@@ -53,6 +57,12 @@ jobs:
             --end ${{ steps.calc.outputs.end }} \
             --output output_${{ matrix.batch }}.csv
 
+      - name: End Timer and Log Duration
+        run: |
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - $start_time))
+          echo "⏱️ Job ${{ matrix.batch }} finished in $DURATION seconds"
+
       - name: Upload CSV artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -63,6 +73,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: process-users
     steps:
+      - name: Start Workflow Timer
+        id: wf_start
+        run: echo "wf_start_time=$(date +%s)" >> $GITHUB_ENV
+
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -107,10 +121,16 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-west-2
 
-      - name: Upload merged CSV to S3
+      - name: Upload results to S3
         run: |
           echo "Uploading to ${{ github.event.inputs.s3_path }}"
           aws s3 cp merged/output.xlsx ${{ github.event.inputs.s3_path }}
+
+      - name: End Workflow Timer and Log Duration
+        run: |
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - $wf_start_time))
+          echo "⏱️ Total workflow (merge + upload) finished in $DURATION seconds"
 
       - name: Send email with S3 link
         uses: dawidd6/action-send-mail@v3

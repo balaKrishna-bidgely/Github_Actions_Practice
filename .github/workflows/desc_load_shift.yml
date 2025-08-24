@@ -1,17 +1,15 @@
-name: Fetch Load Shiffted savings Amount from MS & BP emails from TOU_RATE_PROMOTION Section
+name: Process 1M Users in Parallel
 
 on:
   workflow_dispatch:
-    inputs:
-      user_file:
-        description: 'Path to the input user file (e.g., users.csv)'
-        required: true
-        default: 'users.csv'
 
 jobs:
-  build-and-notify:
+  process-users:
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        batch: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+                10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -26,19 +24,70 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run the Python script
+      - name: Run batch
         run: |
-          python desc_email.py # IMPORTANT: Change this to your script's filename
+          BATCH_SIZE=50000
+          START=$(( ${{ matrix.batch }} * BATCH_SIZE + 1 ))
+          END=$(( (${{ matrix.batch }} + 1) * BATCH_SIZE ))
 
-      - name: Commit and push output file
+          echo "Processing lines $START to $END..."
+          python desc_email.py \
+            --input users.csv \
+            --start $START \
+            --end $END \
+            --output output_${{ matrix.batch }}.csv
+
+      - name: Upload CSV artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-batch-${{ matrix.batch }}
+          path: output_${{ matrix.batch }}.csv
+
+  merge-results:
+    runs-on: ubuntu-latest
+    needs: process-users
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Download all batch artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: results
+
+      - name: Merge all CSV files
+        run: |
+          mkdir merged
+          HEADER_WRITTEN=false
+          OUTFILE=merged/output.csv
+
+          for file in results/**/output_*.csv; do
+            echo "Merging $file"
+            if [ "$HEADER_WRITTEN" = false ]; then
+              cat "$file" > "$OUTFILE"
+              HEADER_WRITTEN=true
+            else
+              tail -n +2 "$file" >> "$OUTFILE"
+            fi
+          done
+
+          echo "✅ Merged CSV written to $OUTFILE"
+
+      - name: Compress final output
+        run: |
+          gzip -c merged/output.csv > merged/output.csv.gz
+          echo "✅ Compressed file: merged/output.csv.gz"
+
+      - name: Commit merged file
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add output.csv
-          git commit -m "Add/update generated output.csv" || echo "No changes to commit"
+          cp merged/output.csv.gz ./output.csv.gz
+          git add output.csv.gz
+          git commit -m "Add/update final merged compressed output.csv.gz" || echo "No changes to commit"
           git push
 
-      - name: Send email with attachment
+      - name: Send email with compressed file
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -48,10 +97,10 @@ jobs:
           subject: 'User Processing Report - ${{ github.run_number }}'
           html_body: |
             <h4>The user processing script has completed.</h4> 
-            <p>Please find the output.csv file attached.</p>
+            <p>Please find the compressed <code>output.csv.gz</code> attached.</p>
             
-            Run Number: ${{ github.run_number }}
+            Run Number: ${{ github.run_number }}<br>
             Repository: ${{ github.repository }}
-          to: balakrishnam@bidgely.com # Change this to your email
+          to: balakrishnam@bidgely.com
           from: GitHub Actions <actions@github.com>
-          attachments: 'output.csv'
+          attachments: output.csv.gz

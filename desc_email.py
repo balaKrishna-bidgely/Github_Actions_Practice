@@ -40,7 +40,6 @@ def create_session(max_pool_size):
         status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods=["GET"]
     )
-    logging.info(f"Considering connection pool of {max_pool_size}")
     adapter = HTTPAdapter(max_retries=retries, pool_connections=max_pool_size, pool_maxsize=max_pool_size)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
@@ -49,6 +48,7 @@ def create_session(max_pool_size):
 
 # Use a shared session for performance & retries
 SESSION = create_session(THREAD_POOL_SIZE)
+logging.info(f"Considering connection pool of {THREAD_POOL_SIZE}")
 
 def get_suggestion_from_notification_body(notification_id: str) -> str:
     try:
@@ -131,6 +131,9 @@ def process_users_from_file(file_path, output_csv, start, end, max_threads=THREA
     logging.info(f"Considering thread-pool size {THREAD_POOL_SIZE}")
     logging.info(f"Processing {total} users (lines {start}-{end})...")
 
+    success_count = 0
+    fail_count = 0
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
         results_iter = executor.map(process_user, users)
 
@@ -141,6 +144,11 @@ def process_users_from_file(file_path, output_csv, start, end, max_threads=THREA
             processed = 0
             for status, rows in results_iter:
                 processed += 1
+                if status == "Success":
+                    success_count += 1
+                else:
+                    fail_count += 1
+
                 if rows:
                     writer.writerows(rows)
 
@@ -148,6 +156,7 @@ def process_users_from_file(file_path, output_csv, start, end, max_threads=THREA
                     logging.info(f"Processed {processed}/{total} users...")
 
     logging.info(f"✅ Finished batch {start}-{end}, saved to {output_csv}")
+    logging.info(f"📊 Summary: Total={total}, Success={success_count}, Failed={fail_count}")
 
 def main():
     setup_logger()

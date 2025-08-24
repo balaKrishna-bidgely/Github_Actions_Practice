@@ -1,4 +1,4 @@
-name: Process Users in Parallel
+name: Process DESC Users in Parallel
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       s3_path:
         description: "S3 location to upload merged output file"
         required: true
-        default: "s3://bidgely-adhoc-productqa/ReCreatingProdData/BalaKrishna/output.csv"
+        default: "s3://bidgely-adhoc-productqa/ReCreatingProdData/BalaKrishna/output.xlsx"
 
 jobs:
   process-users:
@@ -34,7 +34,7 @@ jobs:
         run: |
           TOTAL=$(wc -l < users.csv)   # total lines in file
           JOBS=20
-          SIZE=$(( (TOTAL + JOBS - 1) / JOBS ))   # ceil division
+          SIZE=$(( (TOTAL + JOBS - 1) / JOBS ))+1   # ceil division
 
           INDEX=${{ matrix.batch }}
           START=$(( INDEX * SIZE + 1 ))
@@ -89,6 +89,17 @@ jobs:
 
           echo "✅ Merged CSV written to $OUTFILE"
 
+      - name: Convert CSV to Excel
+        run: |
+          echo "📊 Converting CSV to Excel..."
+          pip install pandas openpyxl
+          python - <<EOF
+          import pandas as pd
+          df = pd.read_csv("merged/output.csv")
+          df.to_excel("merged/output.xlsx", index=False)
+          print("✅ Conversion complete: merged/output.xlsx")
+          EOF
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -99,7 +110,7 @@ jobs:
       - name: Upload merged CSV to S3
         run: |
           echo "Uploading to ${{ github.event.inputs.s3_path }}"
-          aws s3 cp merged/output.csv ${{ github.event.inputs.s3_path }}
+          aws s3 cp merged/output.xlsx ${{ github.event.inputs.s3_path }}
 
       - name: Send email with S3 link
         uses: dawidd6/action-send-mail@v3
@@ -111,10 +122,16 @@ jobs:
           subject: 'User Processing Report - ${{ github.run_number }}'
           html_body: |
             <h4>The user processing script has completed ✅</h4> 
-            <p>The final merged file has been uploaded to S3:</p>
+            <p>The result file is uploaded to S3:</p>
             <p><code>${{ github.event.inputs.s3_path }}</code></p>
             <br>
             Run Number: ${{ github.run_number }}<br>
             Repository: ${{ github.repository }}
           to: balakrishnam@bidgely.com
           from: GitHub Actions <actions@github.com>
+
+      - name: Delete all intermediate artifacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            results-batch-*

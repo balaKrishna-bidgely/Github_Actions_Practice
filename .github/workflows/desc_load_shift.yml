@@ -1,4 +1,4 @@
-name: Process 1M Users in Parallel
+name: Process Users in Parallel
 
 on:
   workflow_dispatch:
@@ -24,17 +24,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Calculate Batch Range
+        id: calc
+        run: |
+          TOTAL=$(wc -l < users.csv)   # total lines in file
+          JOBS=20
+          SIZE=$(( (TOTAL + JOBS - 1) / JOBS ))   # ceil division
+
+          INDEX=${{ matrix.batch }}
+          START=$(( INDEX * SIZE + 1 ))
+          END=$(( (INDEX + 1) * SIZE ))
+          if [ $END -gt $TOTAL ]; then END=$TOTAL; fi
+
+          echo "start=$START" >> $GITHUB_OUTPUT
+          echo "end=$END" >> $GITHUB_OUTPUT
+
       - name: Run batch
         run: |
-          BATCH_SIZE=50000
-          START=$(( ${{ matrix.batch }} * BATCH_SIZE + 1 ))
-          END=$(( (${{ matrix.batch }} + 1) * BATCH_SIZE ))
-
-          echo "Processing lines $START to $END..."
+          echo "Processing lines ${{ steps.calc.outputs.start }} to ${{ steps.calc.outputs.end }}..."
           python desc_email.py \
             --input users.csv \
-            --start $START \
-            --end $END \
+            --start ${{ steps.calc.outputs.start }} \
+            --end ${{ steps.calc.outputs.end }} \
             --output output_${{ matrix.batch }}.csv
 
       - name: Upload CSV artifacts

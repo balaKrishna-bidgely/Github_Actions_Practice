@@ -30,7 +30,7 @@ def setup_logger():
 def get_suggestion_from_notification_body(notification_id: str) -> str:
     try:
         url = f"{API_BASE_URL}/2.1/utility_notifications/notifications/{notification_id}?access_token={API_ACCESS_TOKEN}"
-        response = requests.get(url, headers=HEADERS, timeout=15)
+        response = requests.get(url, headers=HEADERS, timeout=30)
         response.raise_for_status()
         data = response.json()
 
@@ -60,7 +60,7 @@ def process_user(user_id: str) -> list:
     url = f"{API_BASE_URL}/2.1/utility_notifications/users/{user_id}?access_token={API_ACCESS_TOKEN}"
     found_rows = []
     try:
-        response = requests.get(url, headers=HEADERS, timeout=15)
+        response = requests.get(url, headers=HEADERS, timeout=30)
         response.raise_for_status()
         data = response.json()
 

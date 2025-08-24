@@ -70,6 +70,8 @@ jobs:
   merge-results:
     runs-on: ubuntu-latest
     needs: process-users
+    if: ${{ always() }} # run even if some parallel jobs fail
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -85,7 +87,7 @@ jobs:
           HEADER_WRITTEN=false
           OUTFILE=merged/output.csv
 
-          for file in results/**/output_*.csv; do
+          for file in results/**/output_[0-9]*.csv; do
             echo "Merging $file"
             if [ "$HEADER_WRITTEN" = false ]; then
               cat "$file" > "$OUTFILE"
@@ -137,6 +139,8 @@ jobs:
           python - <<EOF
           import pandas as pd
           df = pd.read_csv("merged/output.csv")
+          if df.shape[1] != 6:
+              raise ValueError(f"❌ Invalid merged file: expected 6 columns, got {df.shape[1]}")
           df.to_excel("merged/output.xlsx", index=False)
           print("✅ Conversion complete: merged/output.xlsx")
           EOF
@@ -149,12 +153,14 @@ jobs:
           aws-region: us-west-2
 
       - name: Upload results to S3
+        if: ${{ success() }} # only upload if all succeeded
         run: |
           echo "Uploading to ${{ github.event.inputs.s3_path }}"
           aws s3 cp merged/output.xlsx ${{ github.event.inputs.s3_path }}
 
       - name: Send email with S3 link and Failed Users
         uses: dawidd6/action-send-mail@v3
+        if: ${{ success() }} # only send if all succeeded
         with:
           server_address: smtp.gmail.com
           server_port: 465
@@ -176,6 +182,7 @@ jobs:
 
       - name: Delete all intermediate artifacts
         uses: geekyeggo/delete-artifact@v5
+        if: ${{ always() }}
         with:
           name: |
             results-batch-*

@@ -162,6 +162,7 @@ def process_users_from_file(file_path, output_csv, start, end, max_threads=THREA
     logging.info(f"📊 Summary: Total={total}, Success={success_count}, Failed={fail_count}")
 
     if failed_users:
+        logging.error(f"❌ Failed userIds ({len(failed_users)}):\n" + "\n".join(failed_users))
         failed_csv = output_csv.replace(".csv", "_failed.csv")
         with open(failed_csv, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)

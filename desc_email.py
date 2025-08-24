@@ -8,29 +8,52 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 import re
 import argparse
-import logging
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # --- Global Configuration ---
 API_BASE_URL = "https://naapi2-external.bidgely.com"
 API_ACCESS_TOKEN = "e4b98e74-ccab-49ee-819a-81005a8302e4"
 ID = "TOU_RATE_PROMOTION"
-NOTIFICATION_TYPES = ['MONTHLY_SUMMARY','BILL_PROJECTION']
+MONTHS_TO_CHECK = [5, 6, 7, 8]
+NOTIFICATION_TYPES = ['MONTHLY_SUMMARY', 'BILL_PROJECTION']
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
 }
+THREAD_POOL_SIZE=100
 # ----------------------------
 
 def setup_logger():
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True
     )
+
+def create_session(max_pool_size):
+    """Create a requests session with retry & backoff."""
+    session = requests.Session()
+    retries = Retry(
+        total=5,                # retry up to 5 times
+        backoff_factor=2,       # wait 2s, 4s, 8s, etc.
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"]
+    )
+    logging.info(f"Considering connection pool of {max_pool_size}")
+    adapter = HTTPAdapter(max_retries=retries, pool_connections=max_pool_size, pool_maxsize=max_pool_size)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
+# Use a shared session for performance & retries
+SESSION = create_session(THREAD_POOL_SIZE)
 
 def get_suggestion_from_notification_body(notification_id: str) -> str:
     try:
         url = f"{API_BASE_URL}/2.1/utility_notifications/notifications/{notification_id}?access_token={API_ACCESS_TOKEN}"
-        response = requests.get(url, headers=HEADERS, timeout=30)
+        response = SESSION.get(url, headers=HEADERS, timeout=60)
         response.raise_for_status()
         data = response.json()
 
@@ -60,7 +83,7 @@ def process_user(user_id: str) -> list:
     url = f"{API_BASE_URL}/2.1/utility_notifications/users/{user_id}?access_token={API_ACCESS_TOKEN}"
     found_rows = []
     try:
-        response = requests.get(url, headers=HEADERS, timeout=30)
+        response = SESSION.get(url, headers=HEADERS, timeout=60)
         response.raise_for_status()
         data = response.json()
 
@@ -70,7 +93,7 @@ def process_user(user_id: str) -> list:
                     ts_ms = n.get("generationTimestamp", 0)
                     gen_date = datetime.fromtimestamp(ts_ms / 1000)
 
-                    if gen_date.year == 2025 and gen_date.month in [5,6,7,8]:
+                    if gen_date.year == 2025 and gen_date.month in MONTHS_TO_CHECK:
                         nid = n.get("notificationId")
                         if nid:
                             suggestion = get_suggestion_from_notification_body(nid)
@@ -85,7 +108,7 @@ def process_user(user_id: str) -> list:
                             logging.info(f"Found: {row}")
                             found_rows.append(row)
         else:
-            logging.info(f"user: {user_id} has 0 noitifactions!")
+            logging.info(f"user: {user_id} has 0 notifications!")
         return ["Success", found_rows]
 
     except Exception as e:
@@ -102,9 +125,10 @@ def read_user_ids(file_path, start, end):
                 break
     return users
 
-def process_users_from_file(file_path, output_csv, start, end, max_threads=100):
+def process_users_from_file(file_path, output_csv, start, end, max_threads=THREAD_POOL_SIZE):
     users = read_user_ids(file_path, start, end)
     total = len(users)
+    logging.info(f"Considering thread-pool size {THREAD_POOL_SIZE}")
     logging.info(f"Processing {total} users (lines {start}-{end})...")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
@@ -112,7 +136,7 @@ def process_users_from_file(file_path, output_csv, start, end, max_threads=100):
 
         with open(output_csv, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow(["userId","notificationType","notificationId","generationTimestamp","Month","loadShiftAmount"])
+            writer.writerow(["userId", "notificationType", "notificationId", "generationTimestamp", "Month", "loadShiftAmount"])
 
             processed = 0
             for status, rows in results_iter:

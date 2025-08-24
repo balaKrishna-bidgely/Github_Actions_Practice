@@ -8,12 +8,16 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 import re
 import argparse
+import logging
 
 # --- Global Configuration ---
 API_BASE_URL = "https://naapi2-external.bidgely.com"
 API_ACCESS_TOKEN = "e4b98e74-ccab-49ee-819a-81005a8302e4"
 ID = "TOU_RATE_PROMOTION"
 NOTIFICATION_TYPES = ['MONTHLY_SUMMARY','BILL_PROJECTION']
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
+}
 # ----------------------------
 
 def setup_logger():
@@ -26,7 +30,7 @@ def setup_logger():
 def get_suggestion_from_notification_body(notification_id: str) -> str:
     try:
         url = f"{API_BASE_URL}/2.1/utility_notifications/notifications/{notification_id}?access_token={API_ACCESS_TOKEN}"
-        response = requests.get(url, timeout=15)
+        response = requests.get(url, headers=HEADERS, timeout=15)
         response.raise_for_status()
         data = response.json()
 
@@ -52,10 +56,11 @@ def get_suggestion_from_notification_body(notification_id: str) -> str:
         return ""
 
 def process_user(user_id: str) -> list:
+    logging.info(f"processing user: {user_id}")
     url = f"{API_BASE_URL}/2.1/utility_notifications/users/{user_id}?access_token={API_ACCESS_TOKEN}"
     found_rows = []
     try:
-        response = requests.get(url, timeout=15)
+        response = requests.get(url, headers=HEADERS, timeout=15)
         response.raise_for_status()
         data = response.json()
 
@@ -69,15 +74,18 @@ def process_user(user_id: str) -> list:
                         nid = n.get("notificationId")
                         if nid:
                             suggestion = get_suggestion_from_notification_body(nid)
-                            if suggestion:
-                                found_rows.append([
-                                    user_id,
-                                    n.get("notificationType"),
-                                    nid,
-                                    ts_ms,
-                                    gen_date.strftime("%B"),
-                                    suggestion
-                                ])
+                            row = [
+                                user_id,
+                                n.get("notificationType"),
+                                nid,
+                                ts_ms,
+                                gen_date.strftime("%B"),
+                                suggestion
+                            ]
+                            logging.info(f"Found: {row}")
+                            found_rows.append(row)
+        else:
+            logging.info(f"user: {user_id} has 0 noitifactions!")
         return ["Success", found_rows]
 
     except Exception as e:

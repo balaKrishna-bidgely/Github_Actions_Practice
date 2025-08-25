@@ -1,0 +1,176 @@
+name: Process EM Users in Parallel
+
+on:
+  workflow_dispatch:
+    inputs:
+      s3_path:
+        description: "S3 location to upload merged output file"
+        required: true
+        default: "s3://bidgely-adhoc-productqa/ReCreatingProdData/BalaKrishna/EM.csv"
+
+jobs:
+  process-users:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        batch: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+                10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Calculate Batch Range
+        id: calc
+        run: |
+          TOTAL=$(wc -l < split.txt)   # total lines in file
+          JOBS=20
+          SIZE=$(( (TOTAL + JOBS - 1) / JOBS ))+1   # ceil division
+
+          INDEX=${{ matrix.batch }}
+          START=$(( INDEX * SIZE + 1 ))
+          END=$(( (INDEX + 1) * SIZE ))
+          if [ $END -gt $TOTAL ]; then END=$TOTAL; fi
+
+          echo "found $TOTAL users in the file"
+          echo "start=$START" >> $GITHUB_OUTPUT
+          echo "end=$END" >> $GITHUB_OUTPUT
+
+      - name: Run batch
+        run: |
+          echo "Processing lines ${{ steps.calc.outputs.start }} to ${{ steps.calc.outputs.end }}..."
+          python em_illingdata.py \
+            --input split.txt \
+            --start ${{ steps.calc.outputs.start }} \
+            --end ${{ steps.calc.outputs.end }} \
+            --output output_${{ matrix.batch }}.csv
+
+      - name: Upload CSV artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-batch-${{ matrix.batch }}
+          path: output_${{ matrix.batch }}.csv
+
+      - name: Upload Failed Users artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-batch-${{ matrix.batch }}
+          path: output_${{ matrix.batch }}_failed.csv
+
+  merge-results:
+    runs-on: ubuntu-latest
+    needs: process-users
+    if: ${{ always() }} # run even if some parallel jobs fail
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Download all batch artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: results
+
+      - name: Merge all CSV files
+        run: |
+          mkdir merged
+          HEADER_WRITTEN=false
+          OUTFILE=merged/output.csv
+
+          for file in results/**/output_[0-9]*.csv; do
+            echo "Merging $file"
+            if [ "$HEADER_WRITTEN" = false ]; then
+              cat "$file" > "$OUTFILE"
+              HEADER_WRITTEN=true
+            else
+              tail -n +2 "$file" >> "$OUTFILE"
+            fi
+          done
+
+          echo "✅ Merged CSV written to $OUTFILE"
+
+      - name: Merge Failed User IDs
+        run: |
+          mkdir -p merged
+          FAILED_FILE=merged/failed_users.txt
+          touch $FAILED_FILE
+
+          for file in results/**/output_*_failed.csv; do
+            if [ -f "$file" ]; then
+              echo "Merging failed users from $file"
+              tail -n +2 "$file" >> $FAILED_FILE   # skip header
+            fi
+          done
+
+          sort -u $FAILED_FILE -o $FAILED_FILE   # remove duplicates
+          echo "✅ Collected failed user IDs into $FAILED_FILE"
+
+      - name: Prepare Email Body
+        id: email_body
+        run: |
+          echo "<ul>" > merged/failed_users.html
+          if [ -s merged/failed_users.txt ]; then
+            while read user; do
+              echo "<li>$user</li>" >> merged/failed_users.html
+            done < merged/failed_users.txt
+          else
+            echo "<li>No failed users 🎉</li>" >> merged/failed_users.html
+          fi
+          echo "</ul>" >> merged/failed_users.html
+          BODY=$(cat merged/failed_users.html)
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Upload results to S3
+        if: ${{ success() }} # only upload if all succeeded
+        run: |
+          echo "Uploading to ${{ github.event.inputs.s3_path }}"
+          aws s3 cp merged/output.csv ${{ github.event.inputs.s3_path }}
+
+      - name: Send email with S3 link and Failed Users
+        uses: dawidd6/action-send-mail@v3
+        if: ${{ success() }} # only send if all succeeded
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.GMAIL_USERNAME }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          subject: 'User Processing Report - ${{ github.run_number }}'
+          html_body: |
+            <h4>The user processing script has completed ✅</h4> 
+            <p>The result file is uploaded to S3:</p>
+            <p><code>${{ github.event.inputs.s3_path }}</code></p>
+            <br>
+            <h4>❌ Failed Users:</h4>
+            ${{ steps.email_body.outputs.body }}
+            <br>
+            Run Number: ${{ github.run_number }}<br>
+            Repository: ${{ github.repository }}
+          to: balakrishnam@bidgely.com
+          from: GitHub Actions <actions@github.com>
+
+      - name: Delete all intermediate artifacts
+        uses: geekyeggo/delete-artifact@v5
+        if: ${{ always() }}
+        with:
+          name: |
+            results-batch-*
+            failed-batch-*

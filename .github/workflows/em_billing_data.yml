@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       s3_path:
-        description: "S3 location to upload merged output file"
+        description: "S3 folder path to upload results (e.g. s3://bucket/folder/)"
         required: true
-        default: "s3://bidgely-adhoc-productqa/ReCreatingProdData/BalaKrishna/EM.csv"
+        default: "s3://bidgely-adhoc-productqa/ReCreatingProdData/BalaKrishna/EM/"
 
 jobs:
   process-users:
@@ -32,9 +32,9 @@ jobs:
       - name: Calculate Batch Range
         id: calc
         run: |
-          TOTAL=$(wc -l < split.txt)   # total lines in file
+          TOTAL=$(wc -l < split.txt)
           JOBS=20
-          SIZE=$(( (TOTAL + JOBS - 1) / JOBS ))+1   # ceil division
+          SIZE=$(( (TOTAL + JOBS - 1) / JOBS ))+1
 
           INDEX=${{ matrix.batch }}
           START=$(( INDEX * SIZE + 1 ))
@@ -70,7 +70,7 @@ jobs:
   merge-results:
     runs-on: ubuntu-latest
     needs: process-users
-    if: ${{ always() }} # run even if some parallel jobs fail
+    if: ${{ always() }}
     
     steps:
       - name: Checkout repository
@@ -81,11 +81,11 @@ jobs:
         with:
           path: results
 
-      - name: Merge all CSV files
+      - name: Merge Successful Results
         run: |
           mkdir merged
           HEADER_WRITTEN=false
-          OUTFILE=merged/output.csv
+          OUTFILE=merged/success.csv
 
           for file in results/**/output_[0-9]*.csv; do
             echo "Merging $file"
@@ -97,37 +97,37 @@ jobs:
             fi
           done
 
-          echo "✅ Merged CSV written to $OUTFILE"
+          echo "✅ Merged success CSV written to $OUTFILE"
 
       - name: Merge Failed User IDs
         run: |
           mkdir -p merged
-          FAILED_FILE=merged/failed_users.txt
+          FAILED_FILE=merged/failed.csv
           touch $FAILED_FILE
 
+          HEADER_ADDED=false
           for file in results/**/output_*_failed.csv; do
             if [ -f "$file" ]; then
               echo "Merging failed users from $file"
-              tail -n +2 "$file" >> $FAILED_FILE   # skip header
+              if [ "$HEADER_ADDED" = false ]; then
+                cat "$file" > $FAILED_FILE
+                HEADER_ADDED=true
+              else
+                tail -n +2 "$file" >> $FAILED_FILE
+              fi
             fi
           done
 
-          sort -u $FAILED_FILE -o $FAILED_FILE   # remove duplicates
+          sort -u $FAILED_FILE -o $FAILED_FILE
           echo "✅ Collected failed user IDs into $FAILED_FILE"
 
       - name: Prepare Email Body
         id: email_body
         run: |
-          echo "<ul>" > merged/failed_users.html
-          if [ -s merged/failed_users.txt ]; then
-            while read user; do
-              echo "<li>$user</li>" >> merged/failed_users.html
-            done < merged/failed_users.txt
-          else
-            echo "<li>No failed users 🎉</li>" >> merged/failed_users.html
-          fi
-          echo "</ul>" >> merged/failed_users.html
-          BODY=$(cat merged/failed_users.html)
+          SUCCESS_PATH="${{ github.event.inputs.s3_path }}success.csv"
+          FAILED_PATH="${{ github.event.inputs.s3_path }}failed.csv"
+          BODY="<p>✅ Success CSV: <a href='$SUCCESS_PATH'>$SUCCESS_PATH</a></p>"
+          BODY="$BODY<p>❌ Failed CSV: <a href='$FAILED_PATH'>$FAILED_PATH</a></p>"
           echo "body<<EOF" >> $GITHUB_OUTPUT
           echo "$BODY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -140,14 +140,13 @@ jobs:
           aws-region: us-west-2
 
       - name: Upload results to S3
-        if: ${{ success() }} # only upload if all succeeded
         run: |
           echo "Uploading to ${{ github.event.inputs.s3_path }}"
-          aws s3 cp merged/output.csv ${{ github.event.inputs.s3_path }}
+          aws s3 cp merged/success.csv ${{ github.event.inputs.s3_path }}success.csv
+          aws s3 cp merged/failed.csv ${{ github.event.inputs.s3_path }}failed.csv
 
-      - name: Send email with S3 link and Failed Users
+      - name: Send email with S3 links
         uses: dawidd6/action-send-mail@v3
-        if: ${{ success() }} # only send if all succeeded
         with:
           server_address: smtp.gmail.com
           server_port: 465
@@ -155,11 +154,7 @@ jobs:
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           subject: 'User Processing Report - ${{ github.run_number }}'
           html_body: |
-            <h4>The user processing script has completed ✅</h4> 
-            <p>The result file is uploaded to S3:</p>
-            <p><code>${{ github.event.inputs.s3_path }}</code></p>
-            <br>
-            <h4>❌ Failed Users:</h4>
+            <h4>The user processing script has completed ✅</h4>
             ${{ steps.email_body.outputs.body }}
             <br>
             Run Number: ${{ github.run_number }}<br>

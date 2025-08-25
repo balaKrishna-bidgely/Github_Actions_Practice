@@ -141,7 +141,8 @@ if results:
         df.to_csv(output_file, mode='a', header=False, index=False)
     else:
         df.to_csv(output_file, index=False)
-    print(f"\n✅ Processed {len(results)} UUIDs. Appended results to '{output_file}'.")
+    print(f"\n✅ Processed {len(results)} UUIDs. Appended results to '{output_file}'.\n")
+    print(f"RESULT: {results}")
 else:
     print("\n⚠️ No valid results to write.")
 

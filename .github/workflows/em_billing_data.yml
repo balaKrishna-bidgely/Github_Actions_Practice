@@ -81,45 +81,37 @@ jobs:
         with:
           path: results
 
-      - name: Merge Successful Results
-        run: |
-          mkdir merged
-          HEADER_WRITTEN=false
-          OUTFILE=merged/success.csv
-
-          for file in results/**/output_[0-9]*.csv; do
-            echo "Merging $file"
-            if [ "$HEADER_WRITTEN" = false ]; then
-              cat "$file" > "$OUTFILE"
-              HEADER_WRITTEN=true
-            else
-              tail -n +2 "$file" >> "$OUTFILE"
-            fi
-          done
-
-          echo "✅ Merged success CSV written to $OUTFILE"
-
-      - name: Merge Failed User IDs
+      - name: Merge Success CSVs
         run: |
           mkdir -p merged
-          FAILED_FILE=merged/failed.csv
-          touch $FAILED_FILE
+          echo "Merging success results..."
+          success_files=$(find results -type f -path "*/results-batch-*/output_*.csv" | sort)
+          if [ -n "$success_files" ]; then
+            head -n 1 $(echo $success_files | awk '{print $1}') > merged/success.csv
+            for f in $success_files; do
+              tail -n +2 "$f" >> merged/success.csv
+              echo "Merging $f"
+            done
+            echo "✅ Merged success CSV written to merged/success.csv"
+          else
+            echo "⚠️ No success files found"
+          fi
 
-          HEADER_ADDED=false
-          for file in results/**/output_*_failed.csv; do
-            if [ -f "$file" ]; then
-              echo "Merging failed users from $file"
-              if [ "$HEADER_ADDED" = false ]; then
-                cat "$file" > $FAILED_FILE
-                HEADER_ADDED=true
-              else
-                tail -n +2 "$file" >> $FAILED_FILE
-              fi
-            fi
-          done
-
-          sort -u $FAILED_FILE -o $FAILED_FILE
-          echo "✅ Collected failed user IDs into $FAILED_FILE"
+      - name: Merge Failed CSVs
+        run: |
+          mkdir -p merged
+          echo "Merging failed results..."
+          failed_files=$(find results -type f -path "*/failed-batch-*/output_*_failed.csv" | sort)
+          if [ -n "$failed_files" ]; then
+            head -n 1 $(echo $failed_files | awk '{print $1}') > merged/failed.csv
+            for f in $failed_files; do
+              tail -n +2 "$f" >> merged/failed.csv
+              echo "Merging $f"
+            done
+            echo "❌ Merged failed CSV written to merged/failed.csv"
+          else
+            echo "🎉 No failed files found"
+          fi
 
       - name: Prepare Email Body
         id: email_body

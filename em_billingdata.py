@@ -5,6 +5,8 @@ import argparse
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="Billing Data Fetch Script")

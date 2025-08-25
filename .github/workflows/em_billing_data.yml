@@ -48,7 +48,7 @@ jobs:
       - name: Run batch
         run: |
           echo "Processing lines ${{ steps.calc.outputs.start }} to ${{ steps.calc.outputs.end }}..."
-          python em_illingdata.py \
+          python em_billingdata.py \
             --input split.txt \
             --start ${{ steps.calc.outputs.start }} \
             --end ${{ steps.calc.outputs.end }} \

@@ -76,7 +76,7 @@ def fetch(uuid, max_retries=5):
                 data = res.json()
                 if not data:
                     print(f"Empty response for user: {uuid}")
-                    continue
+                    return
 
                 user_row = {"uuid": uuid}
                 user_valid = True

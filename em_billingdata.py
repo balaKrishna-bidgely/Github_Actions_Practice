@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import csv
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="Billing Data Fetch Script")
@@ -14,12 +15,12 @@ parser.add_argument('--input', required=True, help="Input file containing UUIDs 
 parser.add_argument("--start", type=int, required=True, help="Start line (1-based index)")
 parser.add_argument("--end", type=int, required=True, help="End line (inclusive, 1-based index)")
 parser.add_argument('--output', required=True, help="Output CSV file name (e.g., billing_data.csv)")
-parser.add_argument('--failures', required=False, help="Failures CSV file name (e.g., failures.csv)")
+# parser.add_argument('--failures', required=False, help="Failures CSV file name (e.g., failures.csv)")
 args = parser.parse_args()
 
 input_file = args.input
 output_file = args.output
-failures_file = args.failures
+# failures_file = args.failures
 
 # Read UUIDs
 df1 = pd.read_csv(input_file, header=None, names=['uuid'])
@@ -74,7 +75,7 @@ def fetch(uuid, max_retries=5):
             if res.status_code == 200:
                 data = res.json()
                 if not data:
-                    raise ValueError("Empty response")
+                    print(f"Empty response for user: {uuid}")
 
                 user_row = {"uuid": uuid}
                 user_valid = True
@@ -111,7 +112,7 @@ def fetch(uuid, max_retries=5):
                         results.append(user_row)
                 else:
                     with failures_lock:
-                        failed_uuids.append({'uuid': uuid})
+                        failed_uuids.append(uuid)
                 return
             else:
                 raise requests.RequestException(f"Bad status code: {res.status_code}")
@@ -143,15 +144,14 @@ else:
     print("\n⚠️ No valid results to write.")
 
 # Write failures if requested
-if failed_uuids and failures_file:
-    df_fail = pd.DataFrame(failed_uuids)
-    if os.path.exists(failures_file):
-        df_fail.to_csv(failures_file, mode='a', header=False, index=False)
-    else:
-        df_fail.to_csv(failures_file, index=False)
-    print(f"❌ {len(failed_uuids)} UUIDs failed. Saved to '{failures_file}'.")
-elif failed_uuids:
-    print(f"❌ {len(failed_uuids)} UUIDs failed:")
+if failed_uuids:
+    failed_csv = output_file.replace(".csv", "_failed.csv")
+    with open(failed_csv, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["userId"])
+        for uid in failed_uuids:
+            writer.writerow([uid])
+    print(f"❌ {len(failed_uuids)} UUIDs failed. Saved to '{failed_csv}'.\n")
     print(failed_uuids)
 else:
     print("🎉 No UUIDs failed.")

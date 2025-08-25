@@ -42,12 +42,33 @@ results_lock = Lock()
 failures_lock = Lock()
 log_lock = Lock()
 
+# Multithreaded processing
+max_workers = 30
+
+def create_session(max_pool_size):
+    """Create a requests session with retry & backoff."""
+    session = requests.Session()
+    retries = Retry(
+        total=5,
+        backoff_factor=2,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"]
+    )
+    adapter = HTTPAdapter(max_retries=retries, pool_connections=max_pool_size, pool_maxsize=max_pool_size)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
+# Use a shared session for performance & retries
+SESSION = create_session(max_workers)
+
 def fetch(uuid, max_retries=5):
     url = f"https://caapi.bidgely.com/billingdata/users/{uuid}/homes/1/utilitydata?t0=1&t1=2110163358"
 
     for attempt in range(max_retries):
         try:
-            res = requests.get(url, headers=headers, timeout=10)
+            res = SESSION.get(url, headers=headers, timeout=10)
             if res.status_code == 200:
                 data = res.json()
                 if not data:
@@ -102,9 +123,6 @@ def fetch(uuid, max_retries=5):
         failed_uuids.append({'uuid': uuid})
     with log_lock:
         print(f"❌ All retries failed for UUID {uuid}\n")
-
-# Multithreaded processing
-max_workers = 30
 
 with ThreadPoolExecutor(max_workers=max_workers) as executor:
     futures = {executor.submit(fetch, uuid): uuid for uuid in uuids}

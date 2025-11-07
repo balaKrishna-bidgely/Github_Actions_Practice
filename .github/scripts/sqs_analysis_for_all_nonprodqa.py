@@ -7,43 +7,19 @@ import pytz
 import pandas as pd
 import sys
 
-# Excluded queues (unchanged)
-EXCLUDED_QUEUES = [
-    '90000S3BCSchedule-nonprodqa', '90000S3Invoice-nonprodqa', '90000S3RawData-nonprodqa', '90000S3UserEnrollment-nonprodqa',
-    '90001S3BCSchedule-nonprodqa', '90001S3Invoice-nonprodqa', '90001S3RawData-nonprodqa', '90001S3UserEnrollment-nonprodqa',
-    '90003S3BCSchedule-nonprodqa', '90003S3Invoice-nonprodqa', '90003S3RawData-nonprodqa', '90003S3UserEnrollment-nonprodqa',
-    '90010S3BCSchedule-nonprodqa', '90010S3Invoice-nonprodqa', '90010S3RawData-nonprodqa', '90010S3UserEnrollment-nonprodqa',
-    '90020S3BCSchedule-nonprodqa', '90020S3Invoice-nonprodqa', '90020S3RawData-nonprodqa', '90020S3UserEnrollment-nonprodqa',
-    '90043S3BCSchedule-nonprodqa', '90043S3Invoice-nonprodqa', '90043S3RawData-nonprodqa', '90043S3UserEnrollment-nonprodqa',
-    '90100S3BCSchedule-nonprodqa', '90100S3Invoice-nonprodqa', '90100S3RawData-nonprodqa', '90100S3UserEnrollment-nonprodqa',
-    '90101S3BCSchedule-nonprodqa', '90101S3Invoice-nonprodqa', '90101S3RawData-nonprodqa', '90101S3UserEnrollment-nonprodqa',
-    '90404S3BCSchedule-nonprodqa', '90404S3Invoice-nonprodqa', '90404S3RawData-nonprodqa', '90404S3UserEnrollment-nonprodqa',
-    '90432S3BCSchedule-nonprodqa', '90432S3Invoice-nonprodqa', '90432S3RawData-nonprodqa', '90432S3UserEnrollment-nonprodqa',
-    '90445S3BCSchedule-nonprodqa', 'AOSavingsEmailEvent-nonprodqa'
-]
-
 # Hardcoded queues (your provided list)
 HARDCODED_QUEUES = [
     "AggregationReadyUsers-nonprodqa", "AggregationReadyUsers-nonprodqa-01", "AggregationReadyUsers-nonprodqa-adhoc",
     "AggregationReadyUsers-nonprodqa-nonprodqa", "AggregationReadyUsersDLQ-nonprodqa",
     "AggregationReadyUsersPriority-nonprodqa", "AggregationReadyUsersPriority-nonprodqa-01",
-    "AggregationReadyUsersPriority-nonprodqa-02", "AggregationRetryUsers-nonprodqa", "BillProjectionEmailEvent-nonprodqa",
-    "BillProjectionReadyPush-nonprodqa", "BillProjectionSMS-nonprodqa", "BudgetAlertEmailEvent-nonprodqa",
-    "BudgetAlertSMS-nonprodqa", "EventAnalyser-nonprodqa", "EventAnalyserPriority-nonprodqa",
-    "GBIngestionCompletionEvent-nonprodqa", "GBRawDataS3Event-nonprodqa", "GBUserDataIngestion-nonprodqa",
-    "GBUserDataIngestionPriority-nonprodqa", "GBWelcomeEmailEvent-nonprodqa", "GBWelcomePush-nonprodqa",
-    "GbDisaggReadyEvent-nonprodqa", "GbTempDataReadyEvent-nonprodqa", "GbTempDataReadyEventPriority-nonprodqa",
+    "AggregationReadyUsersPriority-nonprodqa-02", "AggregationRetryUsers-nonprodqa", "GBUserDataIngestion-nonprodqa",
+    "GBUserDataIngestionPriority-nonprodqa","GbDisaggReadyEvent-nonprodqa", "GbTempDataReadyEvent-nonprodqa", "GbTempDataReadyEventPriority-nonprodqa",
     "GbTempDataReadyEventPyAmi-nonprodqa", "GbTempDataReadyEventPyAmi-nonprodqa-0", "GbTempDataReadyEventPyAmi-nonprodqa-00",
     "GbTempDataReadyEventPyAmi-nonprodqa-01", "GbTempDataReadyEventPyAmi-nonprodqa-1", "GbTempDataReadyEventPyAmiPriority-nonprodqa",
-    "GbUploadEvent-nonprodqa", "GbUploadEventPriority-nonprodqa", "GbcConsumptionEvent-nonprodqa",
-    "GenericEventData-nonprodqa", "GenericNotificationEvent-nonprodqa", "MonthlySummaryEmailEvent-nonprodqa",
-    "MonthlySummaryReadyPush-nonprodqa", "NBIEmailEvent-nonprodqa", "NbiDataReady-nonprodqa",
-    "NeighbourhoodComparisonEmailEvent-nonprodqa", "NeighbourhoodComparisonEmailrandomEvent-nonprodqa",
-    "NeighbourhoodComparisonEvent-nonprodqa", "NotificationsProcessorEventPriority-nonprodqa",
-    "PDFGeneration-nonprodqa", "PDFGenerationPriority-nonprodqa", "PdfGeneration-nonprodqa",
-    "PdfGenerationPriority-nonprodqa", "RateComparison-nonprodqa", "RatePlanEvent-nonprodqa",
-    "S3RawDataArchiveEvent-nonprodqa",
+    "GbUploadEvent-nonprodqa", "GbUploadEventPriority-nonprodqa", "GbcConsumptionEvent-nonprodqa", "NotificationsProcessorEventPriority-nonprodqa",
+    "PDFGeneration-nonprodqa", "PDFGenerationPriority-nonprodqa"
 ]
+AWS_REGION = 'us-west-2'
 
 
 # --- Date parsing helpers ---
@@ -92,17 +68,14 @@ def daterange(start_date, end_date):
 
 # --- Queue discovery ---
 def get_all_sqs_queues():
-    candidates = set(HARDCODED_QUEUES)
-    filtered = [q for q in candidates if 'nonprodqa' in q.lower() and not re.match(r'^\d', q)]
-    excluded = {q.lower() for q in EXCLUDED_QUEUES}
-    final = [q for q in filtered if q.lower() not in excluded]
-    print(f"Using {len(final)} queues after filtering/exclusions.")
-    return sorted(final)
+    sqs_queues = set(HARDCODED_QUEUES)
+    print(f"Using {len(sqs_queues)} queues.")
+    return sorted(sqs_queues)
 
 
 # --- Metric gathering ---
 def get_sqs_metrics(queues, report_day_ist, ist_tz):
-    cloudwatch = boto3.client('cloudwatch', region_name='us-west-2')
+    cloudwatch = boto3.client('cloudwatch', region_name=AWS_REGION)
     start1 = ist_tz.localize(datetime.combine(report_day_ist, time(hour=1, minute=30)))
     end1 = ist_tz.localize(datetime.combine(report_day_ist, time(hour=7, minute=30)))
     start2 = end1

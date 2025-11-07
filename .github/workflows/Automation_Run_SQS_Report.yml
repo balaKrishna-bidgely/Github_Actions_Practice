@@ -49,12 +49,12 @@ jobs:
       run: |
         # Determine the command to run based on inputs
         if [ -n "${{ github.event.inputs.date }}" ]; then
-          python sqs_analysis_for_all_nonprodqa.py "${{ github.event.inputs.date }}"
+          python .github/scripts/sqs_analysis_for_all_nonprodqa.py "${{ github.event.inputs.date }}"
         elif [ -n "${{ github.event.inputs.from_date }}" ] && [ -n "${{ github.event.inputs.to_date }}" ]; then
-          python sqs_analysis_for_all_nonprodqa.py --from "${{ github.event.inputs.from_date }}" --to "${{ github.event.inputs.to_date }}"
+          python .github/scripts/sqs_analysis_for_all_nonprodqa.py --from "${{ github.event.inputs.from_date }}" --to "${{ github.event.inputs.to_date }}"
         else
           # Default: run for today
-          python sqs_analysis_for_all_nonprodqa.py
+          python .github/scripts/sqs_analysis_for_all_nonprodqa.py
         fi
 
         # List all generated files for debugging

@@ -61,24 +61,23 @@ jobs:
         echo "=== Generated files ==="
         ls -la sqs_report*.html || echo "No HTML files found"
 
-        # The Python script now generates email-friendly HTML automatically
-        # Find the email-friendly HTML file
-        EMAIL_HTML_FILE=$(ls sqs_report_email_*.html 2>/dev/null | head -1)
+        # Find the main HTML file (no longer generating separate email version)
+        HTML_FILE=$(ls sqs_report_*.html 2>/dev/null | head -1)
 
-        if [ -n "$EMAIL_HTML_FILE" ] && [ -f "$EMAIL_HTML_FILE" ]; then
-          echo "Found email HTML file: $EMAIL_HTML_FILE"
-          echo "email_html_file=$EMAIL_HTML_FILE" >> $GITHUB_OUTPUT
+        if [ -n "$HTML_FILE" ] && [ -f "$HTML_FILE" ]; then
+          echo "Found HTML file: $HTML_FILE"
+          echo "html_file=$HTML_FILE" >> $GITHUB_OUTPUT
 
-          # Copy the email HTML file to the expected location
-          cp "$EMAIL_HTML_FILE" email_content.html
-          echo "Email content ready: $EMAIL_HTML_FILE"
+          # Copy the HTML file to the expected location for email
+          cp "$HTML_FILE" email_content.html
+          echo "Email content ready: $HTML_FILE"
 
           # Show file size for verification
-          echo "Email HTML file size: $(wc -c < "$EMAIL_HTML_FILE") bytes"
-          echo "First few lines of email content:"
-          head -10 "$EMAIL_HTML_FILE"
+          echo "HTML file size: $(wc -c < "$HTML_FILE") bytes"
+          echo "First few lines of content:"
+          head -10 "$HTML_FILE"
         else
-          echo "Error: No email HTML file found"
+          echo "Error: No HTML file found"
           echo "Available files:"
           ls -la *.html 2>/dev/null || echo "No HTML files at all"
           exit 1
@@ -92,16 +91,16 @@ jobs:
           echo "File size: $(wc -c < email_content.html) bytes"
           echo "Line count: $(wc -l < email_content.html) lines"
 
-          # Count how many queue rows are in the email
-          QUEUE_COUNT=$(grep -c 'font-weight: bold; color: #333' email_content.html || echo "0")
-          echo "Number of queue rows found in email: $QUEUE_COUNT"
+          # Count how many queue rows are in the HTML
+          QUEUE_COUNT=$(grep -c 'class="queue-name"' email_content.html || echo "0")
+          echo "Number of queue rows found: $QUEUE_COUNT"
 
-          # Show a sample of queue names from the email
-          echo "Sample queue names from email:"
-          grep -o 'font-weight: bold; color: #333;">[^<]*' email_content.html | head -5 | sed 's/.*">/- /' || echo "No queue names found"
+          # Show a sample of queue names from the HTML
+          echo "Sample queue names:"
+          grep -o 'class="queue-name">[^<]*' email_content.html | head -5 | sed 's/.*">/- /' || echo "No queue names found"
 
-          echo "Last few queue names from email:"
-          grep -o 'font-weight: bold; color: #333;">[^<]*' email_content.html | tail -5 | sed 's/.*">/- /' || echo "No queue names found"
+          echo "Last few queue names:"
+          grep -o 'class="queue-name">[^<]*' email_content.html | tail -5 | sed 's/.*">/- /' || echo "No queue names found"
         else
           echo "ERROR: email_content.html file not found!"
           ls -la *.html
@@ -115,7 +114,7 @@ jobs:
         username: ${{ secrets.GMAIL_USERNAME }}
         password: ${{ secrets.GMAIL_APP_PASSWORD }}
         subject: "SQS Report - ${{ github.event.inputs.date || 'Today' }}"
-        to: balakrishnam@bidgely.com
+        to: balakrishnam@bidgely.com, chaitanyak@bidgely.com
         from: ${{ secrets.GMAIL_USERNAME }}
         html_body: file://email_content.html
 

@@ -9,14 +9,11 @@ import sys
 
 # Hardcoded queues (your provided list)
 HARDCODED_QUEUES = [
-    "AggregationReadyUsers-nonprodqa", "AggregationReadyUsers-nonprodqa-01", "AggregationReadyUsers-nonprodqa-adhoc",
-    "AggregationReadyUsers-nonprodqa-nonprodqa", "AggregationReadyUsersDLQ-nonprodqa",
-    "AggregationReadyUsersPriority-nonprodqa", "AggregationReadyUsersPriority-nonprodqa-01",
-    "AggregationReadyUsersPriority-nonprodqa-02", "AggregationRetryUsers-nonprodqa", "GBUserDataIngestion-nonprodqa",
-    "GBUserDataIngestionPriority-nonprodqa","GbDisaggReadyEvent-nonprodqa", "GbTempDataReadyEvent-nonprodqa", "GbTempDataReadyEventPriority-nonprodqa",
+    "AggregationReadyUsers-nonprodqa", "AggregationReadyUsers-nonprodqa-01", 
+    "AggregationReadyUsersPriority-nonprodqa", "AggregationReadyUsersPriority-nonprodqa-01", "GBUserDataIngestion-nonprodqa",
+    "GBUserDataIngestionPriority-nonprodqa", "GbTempDataReadyEventPriority-nonprodqa",
     "GbTempDataReadyEventPyAmi-nonprodqa", "GbTempDataReadyEventPyAmi-nonprodqa-0", "GbTempDataReadyEventPyAmi-nonprodqa-00",
     "GbTempDataReadyEventPyAmi-nonprodqa-01", "GbTempDataReadyEventPyAmi-nonprodqa-1", "GbTempDataReadyEventPyAmiPriority-nonprodqa",
-    "GbUploadEvent-nonprodqa", "GbUploadEventPriority-nonprodqa", "GbcConsumptionEvent-nonprodqa", "NotificationsProcessorEventPriority-nonprodqa",
     "PDFGeneration-nonprodqa", "PDFGenerationPriority-nonprodqa"
 ]
 AWS_REGION = 'us-west-2'
@@ -76,25 +73,48 @@ def get_all_sqs_queues():
 # --- Metric gathering ---
 def get_sqs_metrics(queues, report_day_ist, ist_tz):
     cloudwatch = boto3.client('cloudwatch', region_name=AWS_REGION)
-    start1 = ist_tz.localize(datetime.combine(report_day_ist, time(hour=1, minute=30)))
-    end1 = ist_tz.localize(datetime.combine(report_day_ist, time(hour=7, minute=30)))
-    start2 = end1
-    end2 = ist_tz.localize(datetime.combine(report_day_ist, time(hour=9, minute=0)))
 
-    windows = [
-        ('Window1', start1, end1),
-        ('Window2', start2, end2)
-    ]
+    # Create 30-minute windows from 1:00 AM to 7:30 AM IST
+    windows = []
+    start_hour = 1
+    start_minute = 0
+
+    # Generate 13 windows: 1:00-1:30, 1:30-2:00, 2:00-2:30, ..., 7:00-7:30
+    for i in range(13):
+        window_start = ist_tz.localize(datetime.combine(report_day_ist, time(hour=start_hour, minute=start_minute)))
+
+        # Calculate end time (30 minutes later)
+        end_minute = start_minute + 30
+        end_hour = start_hour
+        if end_minute >= 60:
+            end_minute = 0
+            end_hour += 1
+
+        window_end = ist_tz.localize(datetime.combine(report_day_ist, time(hour=end_hour, minute=end_minute)))
+
+        # Create window label
+        start_time_str = f"{start_hour:02d}:{start_minute:02d}"
+        end_time_str = f"{end_hour:02d}:{end_minute:02d}"
+        window_label = f"{start_time_str}-{end_time_str}"
+
+        windows.append((window_label, window_start, window_end))
+
+        # Move to next 30-minute slot
+        start_minute += 30
+        if start_minute >= 60:
+            start_minute = 0
+            start_hour += 1
+
     results = []
 
     for queue in queues:
         print(f"Processing queue: {queue}")
         row = {'Queue': queue}
 
-        for win, start, end in windows:
+        for win_label, start, end in windows:
             s_utc, e_utc = start.astimezone(pytz.utc), end.astimezone(pytz.utc)
 
-            # Visible
+            # Visible Messages
             try:
                 vis_resp = cloudwatch.get_metric_statistics(
                     Namespace='AWS/SQS',
@@ -102,11 +122,11 @@ def get_sqs_metrics(queues, report_day_ist, ist_tz):
                     Dimensions=[{'Name': 'QueueName', 'Value': queue}],
                     StartTime=s_utc, EndTime=e_utc, Period=300, Statistics=['Maximum']
                 )
-                row[f'Visible_{win}'] = int(max([dp['Maximum'] for dp in vis_resp.get('Datapoints', [])], default=0))
+                row[f'Visible_{win_label}'] = int(max([dp['Maximum'] for dp in vis_resp.get('Datapoints', [])], default=0))
             except Exception as e:
-                row[f'Visible_{win}'] = f"Error: {str(e)}"
+                row[f'Visible_{win_label}'] = f"Error: {str(e)}"
 
-            # Received
+            # Received Messages
             try:
                 rec_resp = cloudwatch.get_metric_statistics(
                     Namespace='AWS/SQS',
@@ -114,22 +134,9 @@ def get_sqs_metrics(queues, report_day_ist, ist_tz):
                     Dimensions=[{'Name': 'QueueName', 'Value': queue}],
                     StartTime=s_utc, EndTime=e_utc, Period=300, Statistics=['Sum']
                 )
-                row[f'Received_{win}'] = int(sum([dp['Sum'] for dp in rec_resp.get('Datapoints', [])]))
+                row[f'Received_{win_label}'] = int(sum([dp['Sum'] for dp in rec_resp.get('Datapoints', [])]))
             except Exception as e:
-                row[f'Received_{win}'] = f"Error: {str(e)}"
-
-            # Deleted (only Window2)
-            if win == 'Window2':
-                try:
-                    del_resp = cloudwatch.get_metric_statistics(
-                        Namespace='AWS/SQS',
-                        MetricName='NumberOfMessagesDeleted',
-                        Dimensions=[{'Name': 'QueueName', 'Value': queue}],
-                        StartTime=s_utc, EndTime=e_utc, Period=300, Statistics=['Sum']
-                    )
-                    row['Deleted_Window2'] = int(sum([dp['Sum'] for dp in del_resp.get('Datapoints', [])]))
-                except Exception as e:
-                    row['Deleted_Window2'] = f"Error: {str(e)}"
+                row[f'Received_{win_label}'] = f"Error: {str(e)}"
 
         results.append(row)
     return results
@@ -147,6 +154,8 @@ def write_html(results_by_day, start_date, end_date):
     html_content = f"""<!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title}</title>
     <style>
         body {{
@@ -184,12 +193,12 @@ def write_html(results_by_day, start_date, end_date):
         table {{
             width: 100%;
             border-collapse: collapse;
-            min-width: 600px;
-            font-size: 11px;
+            min-width: 1400px;
+            font-size: 9px;
         }}
         th, td {{
             border: 1px solid #ddd;
-            padding: 8px;
+            padding: 4px;
             text-align: left;
         }}
         th {{
@@ -241,8 +250,8 @@ def write_html(results_by_day, start_date, end_date):
                 margin-top: 20px;
             }}
             table {{
-                font-size: 10px;
-                min-width: 500px;
+                font-size: 8px;
+                min-width: 1200px;
             }}
             th, td {{
                 padding: 4px;
@@ -265,8 +274,8 @@ def write_html(results_by_day, start_date, end_date):
                 font-size: 1rem;
             }}
             table {{
-                font-size: 9px;
-                min-width: 450px;
+                font-size: 7px;
+                min-width: 1000px;
             }}
             th, td {{
                 padding: 3px;
@@ -283,21 +292,26 @@ def write_html(results_by_day, start_date, end_date):
         <h1>{title}</h1>
         <div class="summary">
             <strong>Report Generated:</strong> {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d-%m-%Y %H:%M:%S IST')}<br>
-            <strong>Time Windows:</strong><br>
-            • Window 1: 01:30 - 07:30 IST<br>
-            • Window 2: 07:30 - 09:00 IST
+            <strong>Time Windows:</strong> 30-minute intervals from 01:00 - 07:30 IST<br>
+            • 13 windows: 01:00-01:30, 01:30-02:00, 02:00-02:30, ..., 07:00-07:30<br>
+            • Each window shows Visible and Received message counts
         </div>
 """
 
     for day, results in results_by_day.items():
         df = pd.DataFrame(results)
-        df = df.rename(columns={
-            'Visible_Window1': 'Visible (1:30-7:30)',
-            'Received_Window1': 'Received (1:30-7:30)',
-            'Visible_Window2': 'Visible (7:30-9:00)',
-            'Received_Window2': 'Received (7:30-9:00)',
-            'Deleted_Window2': 'Deleted (7:30-9:00)'
-        })
+
+        # Create column rename mapping for 30-minute windows
+        rename_mapping = {}
+        for col in df.columns:
+            if col.startswith('Visible_') and col != 'Queue':
+                time_window = col.replace('Visible_', '')
+                rename_mapping[col] = f'Vis {time_window}'
+            elif col.startswith('Received_') and col != 'Queue':
+                time_window = col.replace('Received_', '')
+                rename_mapping[col] = f'Rec {time_window}'
+
+        df = df.rename(columns=rename_mapping)
 
         html_content += f"""
         <h2>📅 {day.strftime('%d-%m-%Y')}</h2>
@@ -346,86 +360,7 @@ def write_html(results_by_day, start_date, end_date):
     return filename
 
 
-# --- Email-friendly HTML output ---
-def write_email_html(results_by_day, start_date, end_date):
-    """Generate email-friendly HTML content without full HTML structure"""
-    if start_date == end_date:
-        title = f"SQS Report for {start_date.strftime('%d-%m-%Y')}"
-    else:
-        title = f"SQS Report from {start_date.strftime('%d-%m-%Y')} to {end_date.strftime('%d-%m-%Y')}"
 
-    # Inline CSS for email compatibility with mobile responsiveness
-    email_html = f'''
-<div style="font-family: Arial, sans-serif; margin: 0; padding: 10px; background-color: #f5f5f5; line-height: 1.4;">
-    <div style="max-width: 1200px; margin: 0 auto; background-color: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <h1 style="color: #333; text-align: center; margin-bottom: 20px; font-size: 1.6rem;">{title}</h1>
-        <div style="background-color: #e9ecef; padding: 15px; border-radius: 5px; margin-bottom: 20px; font-size: 0.9rem;">
-            <strong>Report Generated:</strong> {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d-%m-%Y %H:%M:%S IST')}<br>
-            <strong>Time Windows:</strong><br>
-            • Window 1: 01:30 - 07:30 IST<br>
-            • Window 2: 07:30 - 09:00 IST
-        </div>
-'''
-
-    for day, results in results_by_day.items():
-        df = pd.DataFrame(results)
-        df = df.rename(columns={
-            'Visible_Window1': 'Visible (1:30-7:30)',
-            'Received_Window1': 'Received (1:30-7:30)',
-            'Visible_Window2': 'Visible (7:30-9:00)',
-            'Received_Window2': 'Received (7:30-9:00)',
-            'Deleted_Window2': 'Deleted (7:30-9:00)'
-        })
-
-        email_html += f'''
-        <h2 style="color: #555; border-bottom: 2px solid #007bff; padding-bottom: 5px; margin-top: 25px; font-size: 1.2rem;">📅 {day.strftime('%d-%m-%Y')}</h2>
-        <div style="overflow-x: auto; margin-bottom: 25px; border: 1px solid #ddd; border-radius: 5px;">
-            <table style="width: 100%; border-collapse: collapse; min-width: 500px; font-size: 11px;">
-                <thead>
-                    <tr>
-'''
-
-        # Add table headers
-        for col in df.columns:
-            email_html += f'                        <th style="border: 1px solid #ddd; padding: 6px; background-color: #007bff; color: white; font-weight: bold; text-align: center; white-space: nowrap;">{col}</th>\n'
-
-        email_html += '''                </tr>
-            </thead>
-            <tbody>
-'''
-
-        # Add table rows
-        for i, (_, row) in enumerate(df.iterrows()):
-            bg_color = "#f9f9f9" if i % 2 == 1 else "white"
-            email_html += f'                <tr style="background-color: {bg_color};">\n'
-            for col in df.columns:
-                value = row[col]
-                if col == 'Queue':
-                    email_html += f'                        <td style="border: 1px solid #ddd; padding: 6px; font-weight: bold; color: #333; max-width: 150px; word-wrap: break-word; white-space: normal; font-size: 10px;">{value}</td>\n'
-                elif isinstance(value, str) and value.startswith('Error:'):
-                    email_html += f'                        <td style="border: 1px solid #ddd; padding: 6px; color: #dc3545; font-style: italic; white-space: nowrap;">{value}</td>\n'
-                else:
-                    email_html += f'                        <td style="border: 1px solid #ddd; padding: 6px; text-align: right; font-family: monospace; white-space: nowrap;">{value}</td>\n'
-            email_html += "                    </tr>\n"
-
-        email_html += '''            </tbody>
-        </table>
-'''
-
-    email_html += '''    </div>
-</div>'''
-
-    # Save email-friendly version
-    if start_date == end_date:
-        email_filename = f"sqs_report_email_{start_date.strftime('%Y%m%d')}.html"
-    else:
-        email_filename = f"sqs_report_email_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.html"
-
-    with open(email_filename, 'w', encoding='utf-8') as f:
-        f.write(email_html)
-
-    print(f"📧 Email-friendly HTML saved: {email_filename}")
-    return email_filename
 
 
 # --- Main ---
@@ -455,18 +390,4 @@ if __name__ == "__main__":
     print(f"\nTotal queues processed across all days: {total_queues_processed}")
 
     write_html(results_by_day, start_date, end_date)
-    email_file = write_email_html(results_by_day, start_date, end_date)
-
-    # Debug: Verify email file content
-    if email_file:
-        import os
-        file_size = os.path.getsize(email_file)
-        print(f"Email HTML file size: {file_size} bytes")
-
-        # Count queues in email file
-        with open(email_file, 'r', encoding='utf-8') as f:
-            email_content = f.read()
-            queue_count_in_email = email_content.count('<td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; color: #333;">')
-            print(f"Queues found in email HTML: {queue_count_in_email}")
-
     print("\nAll done ✅")

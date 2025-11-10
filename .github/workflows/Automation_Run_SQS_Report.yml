@@ -18,6 +18,21 @@ on:
         description: 'End date for range (dd-mm-yyyy)'
         required: false
         type: string
+      start_time:
+        description: 'Start time (HH:MM format, e.g., 01:00)'
+        required: false
+        type: string
+        default: '01:00'
+      end_time:
+        description: 'End time (HH:MM format, e.g., 07:30)'
+        required: false
+        type: string
+        default: '07:30'
+      granularity:
+        description: 'Time window granularity in minutes (e.g., 30, 60)'
+        required: false
+        type: string
+        default: '30'
 
 jobs:
   generate-and-send-report:
@@ -35,7 +50,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install boto3 pandas pytz
+        pip install boto3 pandas pytz openpyxl
         
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
@@ -47,22 +62,38 @@ jobs:
     - name: Generate SQS Report
       id: generate_report
       run: |
+        # Build command with time parameters
+        BASE_CMD="python .github/scripts/sqs_analysis_for_all_nonprodqa.py"
+        TIME_PARAMS=""
+
+        # Add time parameters if provided
+        if [ -n "${{ github.event.inputs.start_time }}" ]; then
+          TIME_PARAMS="$TIME_PARAMS --start-time '${{ github.event.inputs.start_time }}'"
+        fi
+        if [ -n "${{ github.event.inputs.end_time }}" ]; then
+          TIME_PARAMS="$TIME_PARAMS --end-time '${{ github.event.inputs.end_time }}'"
+        fi
+        if [ -n "${{ github.event.inputs.granularity }}" ]; then
+          TIME_PARAMS="$TIME_PARAMS --granularity ${{ github.event.inputs.granularity }}"
+        fi
+
         # Determine the command to run based on inputs
         if [ -n "${{ github.event.inputs.date }}" ]; then
-          python .github/scripts/sqs_analysis_for_all_nonprodqa.py "${{ github.event.inputs.date }}"
+          eval "$BASE_CMD '${{ github.event.inputs.date }}' $TIME_PARAMS"
         elif [ -n "${{ github.event.inputs.from_date }}" ] && [ -n "${{ github.event.inputs.to_date }}" ]; then
-          python .github/scripts/sqs_analysis_for_all_nonprodqa.py --from "${{ github.event.inputs.from_date }}" --to "${{ github.event.inputs.to_date }}"
+          eval "$BASE_CMD --from '${{ github.event.inputs.from_date }}' --to '${{ github.event.inputs.to_date }}' $TIME_PARAMS"
         else
           # Default: run for today
-          python .github/scripts/sqs_analysis_for_all_nonprodqa.py
+          eval "$BASE_CMD $TIME_PARAMS"
         fi
 
         # List all generated files for debugging
         echo "=== Generated files ==="
-        ls -la sqs_report*.html || echo "No HTML files found"
+        ls -la sqs_report*.* || echo "No report files found"
 
         # Find the main HTML file (no longer generating separate email version)
         HTML_FILE=$(ls sqs_report_*.html 2>/dev/null | head -1)
+        EXCEL_FILE=$(ls sqs_report_*.xlsx 2>/dev/null | head -1)
 
         if [ -n "$HTML_FILE" ] && [ -f "$HTML_FILE" ]; then
           echo "Found HTML file: $HTML_FILE"
@@ -81,6 +112,14 @@ jobs:
           echo "Available files:"
           ls -la *.html 2>/dev/null || echo "No HTML files at all"
           exit 1
+        fi
+
+        if [ -n "$EXCEL_FILE" ] && [ -f "$EXCEL_FILE" ]; then
+          echo "Found Excel file: $EXCEL_FILE"
+          echo "excel_file=$EXCEL_FILE" >> $GITHUB_OUTPUT
+          echo "Excel file size: $(wc -c < "$EXCEL_FILE") bytes"
+        else
+          echo "Warning: No Excel file found"
         fi
 
     - name: Verify Email Content
@@ -117,10 +156,12 @@ jobs:
         to: balakrishnam@bidgely.com, chaitanyak@bidgely.com
         from: ${{ secrets.GMAIL_USERNAME }}
         html_body: file://email_content.html
+        attachments: ${{ steps.generate_report.outputs.excel_file }}
 
-    - name: Clean up HTML files
+    - name: Clean up generated files
       run: |
-        echo "Cleaning up generated HTML files..."
+        echo "Cleaning up generated files..."
         rm -f sqs_report_*.html
+        rm -f sqs_report_*.xlsx
         rm -f email_content.html
-        echo "HTML files deleted successfully"
+        echo "Generated files deleted successfully"

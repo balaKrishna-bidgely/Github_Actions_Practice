@@ -9,12 +9,10 @@ import sys
 
 # Hardcoded queues (your provided list)
 HARDCODED_QUEUES = [
-    "AggregationReadyUsers-nonprodqa", "AggregationReadyUsers-nonprodqa-01", 
+    "AggregationReadyUsers-nonprodqa", "AggregationReadyUsers-nonprodqa-01",
     "AggregationReadyUsersPriority-nonprodqa", "AggregationReadyUsersPriority-nonprodqa-01", "GBUserDataIngestion-nonprodqa",
-    "GBUserDataIngestionPriority-nonprodqa", "GbTempDataReadyEventPriority-nonprodqa",
-    "GbTempDataReadyEventPyAmi-nonprodqa", "GbTempDataReadyEventPyAmi-nonprodqa-0", "GbTempDataReadyEventPyAmi-nonprodqa-00",
-    "GbTempDataReadyEventPyAmi-nonprodqa-01", "GbTempDataReadyEventPyAmi-nonprodqa-1", "GbTempDataReadyEventPyAmiPriority-nonprodqa",
-    "PDFGeneration-nonprodqa", "PDFGenerationPriority-nonprodqa"
+    "GbTempDataReadyEventPyAmi-nonprodqa", "GbTempDataReadyEventPyAmi-nonprodqa-00",
+    "GbTempDataReadyEventPyAmi-nonprodqa-01", "GbTempDataReadyEventPyAmiPriority-nonprodqa"
 ]
 AWS_REGION = 'us-west-2'
 
@@ -32,16 +30,39 @@ def parse_args_ist_date_range():
     parser.add_argument("date", nargs="?", help="Single IST date in dd-mm-yyyy")
     parser.add_argument("--from", dest="from_date", help="Start IST date in dd-mm-yyyy")
     parser.add_argument("--to", dest="to_date", help="End IST date in dd-mm-yyyy")
+    parser.add_argument('--start-time', dest='start_time', default='01:00',
+                       help='Start time in HH:MM format (default: 01:00)')
+    parser.add_argument('--end-time', dest='end_time', default='07:30',
+                       help='End time in HH:MM format (default: 07:30)')
+    parser.add_argument('--granularity', dest='granularity', type=int, default=30,
+                       help='Time window granularity in minutes (default: 30)')
     args = parser.parse_args()
 
     ist = pytz.timezone('Asia/Kolkata')
+
+    # Parse and validate time arguments
+    try:
+        start_hour, start_minute = map(int, args.start_time.split(':'))
+        end_hour, end_minute = map(int, args.end_time.split(':'))
+
+        if not (0 <= start_hour <= 23 and 0 <= start_minute <= 59):
+            raise ValueError("Invalid start time")
+        if not (0 <= end_hour <= 23 and 0 <= end_minute <= 59):
+            raise ValueError("Invalid end time")
+        if args.granularity <= 0 or args.granularity > 1440:  # Max 24 hours
+            raise ValueError("Granularity must be between 1 and 1440 minutes")
+
+    except ValueError as e:
+        print(f"Error parsing time arguments: {e}")
+        print("Time format should be HH:MM (e.g., 01:00, 07:30)")
+        raise SystemExit("Invalid time parameters")
 
     if args.date and (args.from_date or args.to_date):
         raise SystemExit("Provide either a single date OR a --from/--to range, not both.")
 
     if args.date:
         d = _parse_ist_date_or_die(args.date)
-        return d, d, ist
+        return d, d, ist, (start_hour, start_minute), (end_hour, end_minute), args.granularity
 
     if args.from_date or args.to_date:
         if not (args.from_date and args.to_date):
@@ -50,10 +71,10 @@ def parse_args_ist_date_range():
         end = _parse_ist_date_or_die(args.to_date)
         if end < start:
             raise SystemExit("--to date must be the same or after --from date.")
-        return start, end, ist
+        return start, end, ist, (start_hour, start_minute), (end_hour, end_minute), args.granularity
 
     today_ist = datetime.now(ist).date()
-    return today_ist, today_ist, ist
+    return today_ist, today_ist, ist, (start_hour, start_minute), (end_hour, end_minute), args.granularity
 
 
 def daterange(start_date, end_date):
@@ -71,39 +92,59 @@ def get_all_sqs_queues():
 
 
 # --- Metric gathering ---
-def get_sqs_metrics(queues, report_day_ist, ist_tz):
+def get_sqs_metrics(queues, report_day_ist, ist_tz, start_time, end_time, granularity):
     cloudwatch = boto3.client('cloudwatch', region_name=AWS_REGION)
 
-    # Create 30-minute windows from 1:00 AM to 7:30 AM IST
+    # Create time windows based on provided parameters
     windows = []
-    start_hour = 1
-    start_minute = 0
+    start_hour, start_minute = start_time
+    end_hour, end_minute = end_time
 
-    # Generate 13 windows: 1:00-1:30, 1:30-2:00, 2:00-2:30, ..., 7:00-7:30
-    for i in range(13):
-        window_start = ist_tz.localize(datetime.combine(report_day_ist, time(hour=start_hour, minute=start_minute)))
+    # Calculate total minutes and number of windows
+    start_total_minutes = start_hour * 60 + start_minute
+    end_total_minutes = end_hour * 60 + end_minute
 
-        # Calculate end time (30 minutes later)
-        end_minute = start_minute + 30
-        end_hour = start_hour
-        if end_minute >= 60:
-            end_minute = 0
-            end_hour += 1
+    # Handle case where end time is next day (e.g., 23:00 to 01:00)
+    if end_total_minutes <= start_total_minutes:
+        end_total_minutes += 24 * 60  # Add 24 hours
 
-        window_end = ist_tz.localize(datetime.combine(report_day_ist, time(hour=end_hour, minute=end_minute)))
+    total_duration = end_total_minutes - start_total_minutes
+    num_windows = total_duration // granularity
+
+    print(f"Generating {num_windows} windows of {granularity} minutes each from {start_hour:02d}:{start_minute:02d} to {end_hour:02d}:{end_minute:02d}")
+
+    # Generate windows dynamically
+    current_minutes = start_total_minutes
+    for i in range(num_windows):
+        # Calculate current window start time
+        window_start_hour = (current_minutes // 60) % 24
+        window_start_minute = current_minutes % 60
+
+        # Calculate window end time
+        end_minutes = current_minutes + granularity
+        window_end_hour = (end_minutes // 60) % 24
+        window_end_minute = end_minutes % 60
+
+        # Create datetime objects (handle day rollover if needed)
+        start_day = report_day_ist
+        end_day = report_day_ist
+
+        # If end time is next day
+        if end_minutes >= 24 * 60:
+            end_day = report_day_ist + timedelta(days=1)
+
+        window_start = ist_tz.localize(datetime.combine(start_day, time(hour=window_start_hour, minute=window_start_minute)))
+        window_end = ist_tz.localize(datetime.combine(end_day, time(hour=window_end_hour, minute=window_end_minute)))
 
         # Create window label
-        start_time_str = f"{start_hour:02d}:{start_minute:02d}"
-        end_time_str = f"{end_hour:02d}:{end_minute:02d}"
+        start_time_str = f"{window_start_hour:02d}:{window_start_minute:02d}"
+        end_time_str = f"{window_end_hour:02d}:{window_end_minute:02d}"
         window_label = f"{start_time_str}-{end_time_str}"
 
         windows.append((window_label, window_start, window_end))
 
-        # Move to next 30-minute slot
-        start_minute += 30
-        if start_minute >= 60:
-            start_minute = 0
-            start_hour += 1
+        # Move to next window
+        current_minutes += granularity
 
     results = []
 
@@ -143,7 +184,7 @@ def get_sqs_metrics(queues, report_day_ist, ist_tz):
 
 
 # --- HTML output ---
-def write_html(results_by_day, start_date, end_date):
+def write_html(results_by_day, start_date, end_date, start_time, end_time, granularity):
     if start_date == end_date:
         filename = f"sqs_report_{start_date.strftime('%Y%m%d')}.html"
         title = f"SQS Report for {start_date.strftime('%d-%m-%Y')}"
@@ -292,8 +333,7 @@ def write_html(results_by_day, start_date, end_date):
         <h1>{title}</h1>
         <div class="summary">
             <strong>Report Generated:</strong> {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d-%m-%Y %H:%M:%S IST')}<br>
-            <strong>Time Windows:</strong> 30-minute intervals from 01:00 - 07:30 IST<br>
-            • 13 windows: 01:00-01:30, 01:30-02:00, 02:00-02:30, ..., 07:00-07:30<br>
+            <strong>Time Windows:</strong> {granularity}-minute intervals from {start_time[0]:02d}:{start_time[1]:02d} - {end_time[0]:02d}:{end_time[1]:02d} IST<br>
             • Each window shows Visible and Received message counts
         </div>
 """
@@ -360,18 +400,76 @@ def write_html(results_by_day, start_date, end_date):
     return filename
 
 
+# --- Excel output ---
+def write_excel(results_by_day, start_date, end_date, start_time, end_time, granularity):
+    """Generate Excel file with the same data as HTML report"""
+    if start_date == end_date:
+        filename = f"sqs_report_{start_date.strftime('%Y%m%d')}.xlsx"
+        title = f"SQS Report for {start_date.strftime('%d-%m-%Y')}"
+    else:
+        filename = f"sqs_report_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.xlsx"
+        title = f"SQS Report from {start_date.strftime('%d-%m-%Y')} to {end_date.strftime('%d-%m-%Y')}"
 
+    # Create Excel writer object
+    with pd.ExcelWriter(filename, engine='openpyxl') as writer:
 
+        # Process each day's data
+        for day, results in results_by_day.items():
+            df = pd.DataFrame(results)
+
+            # Create column rename mapping for Excel (more readable than HTML version)
+            rename_mapping = {}
+            for col in df.columns:
+                if col.startswith('Visible_') and col != 'Queue':
+                    time_window = col.replace('Visible_', '')
+                    rename_mapping[col] = f'Visible {time_window}'
+                elif col.startswith('Received_') and col != 'Queue':
+                    time_window = col.replace('Received_', '')
+                    rename_mapping[col] = f'Received {time_window}'
+
+            df = df.rename(columns=rename_mapping)
+
+            # Create sheet name from date
+            sheet_name = day.strftime('%d-%m-%Y')
+
+            # Write to Excel sheet
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+            # Get the worksheet to apply formatting
+            worksheet = writer.sheets[sheet_name]
+
+            # Auto-adjust column widths
+            for column in worksheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+
+                # Set column width (with some padding)
+                adjusted_width = min(max_length + 2, 20)  # Cap at 20 characters
+                worksheet.column_dimensions[column_letter].width = adjusted_width
+
+            # Format header row
+            for cell in worksheet[1]:
+                cell.font = cell.font.copy(bold=True)
+
+    print(f"\n📊 Excel report saved: {filename}")
+    return filename
 
 # --- Main ---
 if __name__ == "__main__":
-    start_date, end_date, ist_tz = parse_args_ist_date_range()
+    start_date, end_date, ist_tz, start_time, end_time, granularity = parse_args_ist_date_range()
     queues = get_all_sqs_queues()
 
     results_by_day = {}
     for d in daterange(start_date, end_date):
         print(f"\n=== Generating report for IST date: {d.strftime('%d-%m-%Y')} ===")
-        results = get_sqs_metrics(queues, d, ist_tz)
+        results = get_sqs_metrics(queues, d, ist_tz, start_time, end_time, granularity)
         results_by_day[d] = results
 
     # Debug: Print summary of results
@@ -389,5 +487,6 @@ if __name__ == "__main__":
 
     print(f"\nTotal queues processed across all days: {total_queues_processed}")
 
-    write_html(results_by_day, start_date, end_date)
+    write_html(results_by_day, start_date, end_date, start_time, end_time, granularity)
+    excel_file = write_excel(results_by_day, start_date, end_date, start_time, end_time, granularity)
     print("\nAll done ✅")

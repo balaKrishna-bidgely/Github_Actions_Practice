@@ -223,7 +223,6 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
             background-color: white;
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }}
         h1 {{
             color: #333;
@@ -260,41 +259,31 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
             font-weight: bold;
             text-align: center;
         }}
-        /* Different colors for different metric types */
-        th[data-metric="visible"] {{
+        /* Email-compatible colors for different metric types */
+        .header-visible {{
             background-color: #28a745 !important; /* Green for Visible */
+            color: white !important;
         }}
-        th[data-metric="received"] {{
+        .header-received {{
             background-color: #17a2b8 !important; /* Teal for Received */
+            color: white !important;
         }}
-        th[data-metric="deleted"] {{
+        .header-deleted {{
             background-color: #dc3545 !important; /* Red for Deleted */
+            color: white !important;
         }}
-        /* Time interval grouping - thinner borders */
-        th[data-window-start="true"] {{
-            border-left: 2px solid #343a40 !important; /* Thinner dark border to separate time windows */
+        /* Email-compatible borders for time interval grouping */
+        .border-window-start {{
+            border-left: 3px solid #343a40 !important; /* Slightly thicker for email visibility */
         }}
-        td[data-window-start="true"] {{
-            border-left: 2px solid #343a40 !important; /* Thinner dark border for data cells too */
+        .border-metric-separator {{
+            border-left: 2px solid #adb5bd !important; /* Visible separator in emails */
         }}
-        /* Subtle borders within the same time window */
-        th[data-metric="received"], th[data-metric="deleted"] {{
-            border-left: 1px solid #adb5bd; /* Lighter border between metrics in same window */
-        }}
-        td.metric-received, td.metric-deleted {{
-            border-left: 1px solid #adb5bd; /* Lighter border for data cells */
-        }}
-        /* Sticky first column for queue names */
-        th:first-child, td:first-child {{
-            position: sticky;
-            left: 0;
-            background-color: white;
-            z-index: 10;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-        }}
-        th:first-child {{
+        /* Queue column styling for emails */
+        .queue-header {{
             background-color: #007bff !important;
-            color: white;
+            color: white !important;
+            font-weight: bold !important;
         }}
         tr:nth-child(even) {{
             background-color: #f9f9f9;
@@ -305,6 +294,7 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
         .queue-name {{
             font-weight: bold;
             color: #333;
+            background-color: #f8f9fa !important; /* Light background for queue names */
         }}
         .metric-value {{
             text-align: right;
@@ -453,7 +443,7 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
 
         for col in df.columns:
             if col == 'Queue':
-                html_content += f"                    <th>{col}</th>\n"
+                html_content += f'                    <th class="queue-header">{col}</th>\n'
             else:
                 # Determine metric type and extract time window
                 metric_type = ""
@@ -472,12 +462,14 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
                 # Check if this is the start of a new time window
                 is_window_start = (time_window != previous_time_window and metric_type == "visible")
 
-                # Build data attributes
-                data_attrs = f'data-metric="{metric_type}"'
+                # Build CSS classes for email compatibility
+                css_classes = f"header-{metric_type}"
                 if is_window_start:
-                    data_attrs += ' data-window-start="true"'
+                    css_classes += " border-window-start"
+                elif metric_type in ["received", "deleted"]:
+                    css_classes += " border-metric-separator"
 
-                html_content += f"                    <th {data_attrs}>{col}</th>\n"
+                html_content += f'                    <th class="{css_classes}">{col}</th>\n'
 
                 # Update previous time window for next iteration
                 if metric_type == "visible":
@@ -504,27 +496,27 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
                     metric_type = ""
                     time_window = ""
                     css_class = "metric-value"
-                    data_attrs = ""
 
                     if col.startswith('Vis '):
                         metric_type = "visible"
                         time_window = col.replace('Vis ', '')
-                        css_class = "metric-value metric-visible"
                     elif col.startswith('Rec '):
                         metric_type = "received"
                         time_window = col.replace('Rec ', '')
-                        css_class = "metric-value metric-received"
                     elif col.startswith('Del '):
                         metric_type = "deleted"
                         time_window = col.replace('Del ', '')
-                        css_class = "metric-value metric-deleted"
 
                     # Check if this is the start of a new time window
                     is_window_start = (time_window != previous_time_window and metric_type == "visible")
-                    if is_window_start:
-                        data_attrs = ' data-window-start="true"'
 
-                    html_content += f'                    <td class="{css_class}"{data_attrs}>{value}</td>\n'
+                    # Build CSS classes for email compatibility
+                    if is_window_start:
+                        css_class += " border-window-start"
+                    elif metric_type in ["received", "deleted"]:
+                        css_class += " border-metric-separator"
+
+                    html_content += f'                    <td class="{css_class}">{value}</td>\n'
 
                     # Update previous time window for next iteration
                     if metric_type == "visible":

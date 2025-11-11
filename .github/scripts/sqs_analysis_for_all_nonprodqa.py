@@ -1,11 +1,8 @@
 import argparse
 import boto3
-import csv
-import re
 from datetime import datetime, date, time, timedelta
 import pytz
 import pandas as pd
-import sys
 
 # Hardcoded queues (your provided list)
 HARDCODED_QUEUES = [
@@ -272,12 +269,14 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
             background-color: #dc3545 !important; /* Red for Deleted */
             color: white !important;
         }}
-        /* Email-compatible borders for time interval grouping */
+        /* Email-compatible borders for time interval grouping - smooth and subtle */
         .border-window-start {{
-            border-left: 3px solid #343a40 !important; /* Slightly thicker for email visibility */
+            border-left: 2px solid #6c757d !important; /* Smooth subtle border for time windows */
+            box-shadow: inset 2px 0 0 rgba(108, 117, 125, 0.1) !important; /* Soft inner shadow */
         }}
         .border-metric-separator {{
-            border-left: 2px solid #adb5bd !important; /* Visible separator in emails */
+            border-left: 1px solid #dee2e6 !important; /* Very light separator for metrics */
+            box-shadow: inset 1px 0 0 rgba(222, 226, 230, 0.3) !important; /* Gentle inner glow */
         }}
         /* Queue column styling for emails */
         .queue-header {{
@@ -336,16 +335,18 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
         .legend-received {{ background-color: #17a2b8; }}
         .legend-deleted {{ background-color: #dc3545; }}
         .legend-early {{
-            border-left: 4px solid #ffc107;
+            border-left: 2px solid #ffc107;
             background-color: #fff3cd;
             color: #856404;
             padding-left: 12px;
+            box-shadow: inset 2px 0 0 rgba(255, 193, 7, 0.1);
         }}
         .legend-late {{
-            border-left: 4px solid #fd7e14;
+            border-left: 2px solid #fd7e14;
             background-color: #ffeaa7;
             color: #8b4513;
             padding-left: 12px;
+            box-shadow: inset 2px 0 0 rgba(253, 126, 20, 0.1);
         }}
 
         /* Mobile-specific styles */

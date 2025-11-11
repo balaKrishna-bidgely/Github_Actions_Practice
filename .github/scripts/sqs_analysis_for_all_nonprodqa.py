@@ -256,27 +256,32 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
             font-weight: bold;
             text-align: center;
         }}
-        /* Email-compatible colors for different metric types */
-        .header-visible {{
+        /* Email-compatible colors for different metric types - high specificity */
+        th.header-visible {{
             background-color: #28a745 !important; /* Green for Visible */
             color: white !important;
+            font-weight: bold !important;
         }}
-        .header-received {{
+        th.header-received {{
             background-color: #17a2b8 !important; /* Teal for Received */
             color: white !important;
+            font-weight: bold !important;
         }}
-        .header-deleted {{
+        th.header-deleted {{
             background-color: #dc3545 !important; /* Red for Deleted */
             color: white !important;
+            font-weight: bold !important;
         }}
-        /* Email-compatible borders for time interval grouping - smooth and subtle */
+        /* Email-compatible smooth borders with soft styling */
         .border-window-start {{
-            border-left: 2px solid #6c757d !important; /* Smooth subtle border for time windows */
-            box-shadow: inset 2px 0 0 rgba(108, 117, 125, 0.1) !important; /* Soft inner shadow */
+            border-left: 3px solid #8a9199 !important; /* Softer gray for smooth appearance */
+            background-color: rgba(138, 145, 153, 0.05) !important; /* Very light background tint */
+            padding-left: 6px !important; /* Extra padding for smooth transition */
         }}
         .border-metric-separator {{
-            border-left: 1px solid #dee2e6 !important; /* Very light separator for metrics */
-            box-shadow: inset 1px 0 0 rgba(222, 226, 230, 0.3) !important; /* Gentle inner glow */
+            border-left: 1px solid #e9ecef !important; /* Ultra-light separator */
+            background-color: rgba(233, 236, 239, 0.03) !important; /* Barely visible background */
+            padding-left: 4px !important; /* Subtle padding for smooth feel */
         }}
         /* Queue column styling for emails */
         .queue-header {{
@@ -335,18 +340,18 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
         .legend-received {{ background-color: #17a2b8; }}
         .legend-deleted {{ background-color: #dc3545; }}
         .legend-early {{
-            border-left: 2px solid #ffc107;
-            background-color: #fff3cd;
+            border-left: 3px solid #ffcd39; /* Softer yellow for smooth appearance */
+            background-color: rgba(255, 243, 205, 0.8); /* Semi-transparent background */
             color: #856404;
-            padding-left: 12px;
-            box-shadow: inset 2px 0 0 rgba(255, 193, 7, 0.1);
+            padding-left: 15px; /* Extra padding for smooth transition */
+            border-radius: 0 3px 3px 0; /* Subtle right-side rounding */
         }}
         .legend-late {{
-            border-left: 2px solid #fd7e14;
-            background-color: #ffeaa7;
+            border-left: 3px solid #ff8c42; /* Softer orange for smooth appearance */
+            background-color: rgba(255, 234, 167, 0.8); /* Semi-transparent background */
             color: #8b4513;
-            padding-left: 12px;
-            box-shadow: inset 2px 0 0 rgba(253, 126, 20, 0.1);
+            padding-left: 15px; /* Extra padding for smooth transition */
+            border-radius: 0 3px 3px 0; /* Subtle right-side rounding */
         }}
 
         /* Mobile-specific styles */
@@ -470,7 +475,17 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
                 elif metric_type in ["received", "deleted"]:
                     css_classes += " border-metric-separator"
 
-                html_content += f'                    <th class="{css_classes}">{col}</th>\n'
+                # Add inline styles for guaranteed email compatibility
+                if metric_type == "visible":
+                    inline_style = 'style="background-color: #28a745 !important; color: white !important; font-weight: bold !important;"'
+                elif metric_type == "received":
+                    inline_style = 'style="background-color: #17a2b8 !important; color: white !important; font-weight: bold !important;"'
+                elif metric_type == "deleted":
+                    inline_style = 'style="background-color: #dc3545 !important; color: white !important; font-weight: bold !important;"'
+                else:
+                    inline_style = ""
+
+                html_content += f'                    <th class="{css_classes}" {inline_style}>{col}</th>\n'
 
                 # Update previous time window for next iteration
                 if metric_type == "visible":
@@ -634,4 +649,12 @@ if __name__ == "__main__":
 
     write_html(results_by_day, start_date, end_date, start_time, end_time, granularity)
     excel_file = write_excel(results_by_day, start_date, end_date, start_time, end_time, granularity)
+
+    # Output formatted date for GitHub Actions
+    if start_date == end_date:
+        formatted_date = start_date.strftime('%d-%m-%Y')
+    else:
+        formatted_date = f"{start_date.strftime('%d-%m-%Y')} to {end_date.strftime('%d-%m-%Y')}"
+
+    print(f"::set-output name=formatted_date::{formatted_date}")
     print("\nAll done ✅")

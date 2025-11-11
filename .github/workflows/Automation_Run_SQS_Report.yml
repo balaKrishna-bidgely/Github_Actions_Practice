@@ -153,7 +153,7 @@ jobs:
         username: ${{ secrets.GMAIL_USERNAME }}
         password: ${{ secrets.GMAIL_APP_PASSWORD }}
         subject: "SQS Report - ${{ github.event.inputs.date || 'Today' }}"
-        to: balakrishnam@bidgely.com,chaitanyak@bidgely.com
+        to: balakrishnam@bidgely.com
         from: ${{ secrets.GMAIL_USERNAME }}
         html_body: file://email_content.html
         attachments: ${{ steps.generate_report.outputs.excel_file }}

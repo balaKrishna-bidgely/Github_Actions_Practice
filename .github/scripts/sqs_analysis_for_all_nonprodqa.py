@@ -179,6 +179,18 @@ def get_sqs_metrics(queues, report_day_ist, ist_tz, start_time, end_time, granul
             except Exception as e:
                 row[f'Received_{win_label}'] = f"Error: {str(e)}"
 
+            # Deleted Messages
+            try:
+                del_resp = cloudwatch.get_metric_statistics(
+                    Namespace='AWS/SQS',
+                    MetricName='NumberOfMessagesDeleted',
+                    Dimensions=[{'Name': 'QueueName', 'Value': queue}],
+                    StartTime=s_utc, EndTime=e_utc, Period=300, Statistics=['Sum']
+                )
+                row[f'Deleted_{win_label}'] = int(sum([dp['Sum'] for dp in del_resp.get('Datapoints', [])]))
+            except Exception as e:
+                row[f'Deleted_{win_label}'] = f"Error: {str(e)}"
+
         results.append(row)
     return results
 
@@ -248,6 +260,42 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
             font-weight: bold;
             text-align: center;
         }}
+        /* Different colors for different metric types */
+        th[data-metric="visible"] {{
+            background-color: #28a745 !important; /* Green for Visible */
+        }}
+        th[data-metric="received"] {{
+            background-color: #17a2b8 !important; /* Teal for Received */
+        }}
+        th[data-metric="deleted"] {{
+            background-color: #dc3545 !important; /* Red for Deleted */
+        }}
+        /* Time interval grouping - thinner borders */
+        th[data-window-start="true"] {{
+            border-left: 2px solid #343a40 !important; /* Thinner dark border to separate time windows */
+        }}
+        td[data-window-start="true"] {{
+            border-left: 2px solid #343a40 !important; /* Thinner dark border for data cells too */
+        }}
+        /* Subtle borders within the same time window */
+        th[data-metric="received"], th[data-metric="deleted"] {{
+            border-left: 1px solid #adb5bd; /* Lighter border between metrics in same window */
+        }}
+        td.metric-received, td.metric-deleted {{
+            border-left: 1px solid #adb5bd; /* Lighter border for data cells */
+        }}
+        /* Sticky first column for queue names */
+        th:first-child, td:first-child {{
+            position: sticky;
+            left: 0;
+            background-color: white;
+            z-index: 10;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }}
+        th:first-child {{
+            background-color: #007bff !important;
+            color: white;
+        }}
         tr:nth-child(even) {{
             background-color: #f9f9f9;
         }}
@@ -272,6 +320,42 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
             border-radius: 5px;
             margin-bottom: 20px;
             font-size: 0.9rem;
+        }}
+        .legend {{
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+        }}
+        .legend-title {{
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #495057;
+        }}
+        .legend-item {{
+            display: inline-block;
+            margin: 5px 10px 5px 0;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.8rem;
+            color: white;
+            font-weight: bold;
+        }}
+        .legend-visible {{ background-color: #28a745; }}
+        .legend-received {{ background-color: #17a2b8; }}
+        .legend-deleted {{ background-color: #dc3545; }}
+        .legend-early {{
+            border-left: 4px solid #ffc107;
+            background-color: #fff3cd;
+            color: #856404;
+            padding-left: 12px;
+        }}
+        .legend-late {{
+            border-left: 4px solid #fd7e14;
+            background-color: #ffeaa7;
+            color: #8b4513;
+            padding-left: 12px;
         }}
 
         /* Mobile-specific styles */
@@ -334,14 +418,14 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
         <div class="summary">
             <strong>Report Generated:</strong> {datetime.now(pytz.timezone('Asia/Kolkata')).strftime('%d-%m-%Y %H:%M:%S IST')}<br>
             <strong>Time Windows:</strong> {granularity}-minute intervals from {start_time[0]:02d}:{start_time[1]:02d} - {end_time[0]:02d}:{end_time[1]:02d} IST<br>
-            • Each window shows Visible and Received message counts
+            • Each window shows Visible, Received, and Deleted message counts
         </div>
 """
 
     for day, results in results_by_day.items():
         df = pd.DataFrame(results)
 
-        # Create column rename mapping for 30-minute windows
+        # Create column rename mapping for time windows
         rename_mapping = {}
         for col in df.columns:
             if col.startswith('Visible_') and col != 'Queue':
@@ -350,6 +434,9 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
             elif col.startswith('Received_') and col != 'Queue':
                 time_window = col.replace('Received_', '')
                 rename_mapping[col] = f'Rec {time_window}'
+            elif col.startswith('Deleted_') and col != 'Queue':
+                time_window = col.replace('Deleted_', '')
+                rename_mapping[col] = f'Del {time_window}'
 
         df = df.rename(columns=rename_mapping)
 
@@ -361,9 +448,40 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
                     <tr>
 """
 
-        # Add table headers
+        # Add table headers with data attributes for styling
+        previous_time_window = None
+
         for col in df.columns:
-            html_content += f"                    <th>{col}</th>\n"
+            if col == 'Queue':
+                html_content += f"                    <th>{col}</th>\n"
+            else:
+                # Determine metric type and extract time window
+                metric_type = ""
+                time_window = ""
+
+                if col.startswith('Vis '):
+                    metric_type = "visible"
+                    time_window = col.replace('Vis ', '')
+                elif col.startswith('Rec '):
+                    metric_type = "received"
+                    time_window = col.replace('Rec ', '')
+                elif col.startswith('Del '):
+                    metric_type = "deleted"
+                    time_window = col.replace('Del ', '')
+
+                # Check if this is the start of a new time window
+                is_window_start = (time_window != previous_time_window and metric_type == "visible")
+
+                # Build data attributes
+                data_attrs = f'data-metric="{metric_type}"'
+                if is_window_start:
+                    data_attrs += ' data-window-start="true"'
+
+                html_content += f"                    <th {data_attrs}>{col}</th>\n"
+
+                # Update previous time window for next iteration
+                if metric_type == "visible":
+                    previous_time_window = time_window
 
         html_content += """                </tr>
             </thead>
@@ -373,6 +491,8 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
         # Add table rows
         for _, row in df.iterrows():
             html_content += "                <tr>\n"
+            previous_time_window = None
+
             for col in df.columns:
                 value = row[col]
                 if col == 'Queue':
@@ -380,7 +500,36 @@ def write_html(results_by_day, start_date, end_date, start_time, end_time, granu
                 elif isinstance(value, str) and value.startswith('Error:'):
                     html_content += f'                    <td class="error">{value}</td>\n'
                 else:
-                    html_content += f'                    <td class="metric-value">{value}</td>\n'
+                    # Determine metric type and time window for data cells
+                    metric_type = ""
+                    time_window = ""
+                    css_class = "metric-value"
+                    data_attrs = ""
+
+                    if col.startswith('Vis '):
+                        metric_type = "visible"
+                        time_window = col.replace('Vis ', '')
+                        css_class = "metric-value metric-visible"
+                    elif col.startswith('Rec '):
+                        metric_type = "received"
+                        time_window = col.replace('Rec ', '')
+                        css_class = "metric-value metric-received"
+                    elif col.startswith('Del '):
+                        metric_type = "deleted"
+                        time_window = col.replace('Del ', '')
+                        css_class = "metric-value metric-deleted"
+
+                    # Check if this is the start of a new time window
+                    is_window_start = (time_window != previous_time_window and metric_type == "visible")
+                    if is_window_start:
+                        data_attrs = ' data-window-start="true"'
+
+                    html_content += f'                    <td class="{css_class}"{data_attrs}>{value}</td>\n'
+
+                    # Update previous time window for next iteration
+                    if metric_type == "visible":
+                        previous_time_window = time_window
+
             html_content += "                </tr>\n"
 
         html_content += """            </tbody>
@@ -426,6 +575,9 @@ def write_excel(results_by_day, start_date, end_date, start_time, end_time, gran
                 elif col.startswith('Received_') and col != 'Queue':
                     time_window = col.replace('Received_', '')
                     rename_mapping[col] = f'Received {time_window}'
+                elif col.startswith('Deleted_') and col != 'Queue':
+                    time_window = col.replace('Deleted_', '')
+                    rename_mapping[col] = f'Deleted {time_window}'
 
             df = df.rename(columns=rename_mapping)
 

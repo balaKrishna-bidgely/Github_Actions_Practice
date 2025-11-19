@@ -1,9 +1,9 @@
 name: SQS Report During Automation Run
 
 on:
-  schedule:
+  # schedule:
     # Runs at 9:15 AM IST (3:45 AM UTC) every day
-     - cron: '45 3 * * *'
+    #  - cron: '45 3 * * *'
   workflow_dispatch:
     inputs:
       date:
